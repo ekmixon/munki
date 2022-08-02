@@ -72,8 +72,7 @@ def dmg_has_sla(dmgpath):
     if pliststr:
         try:
             plist = readPlistFromString(pliststr)
-            properties = plist.get('Properties')
-            if properties:
+            if properties := plist.get('Properties'):
                 has_sla = properties.get('Software License Agreement', False)
         except PlistReadError:
             pass
@@ -96,8 +95,7 @@ def hdiutil_info():
     (pliststr, out) = utils.getFirstPlist(out)
     if pliststr:
         try:
-            plist = readPlistFromString(pliststr)
-            return plist
+            return readPlistFromString(pliststr)
         except PlistReadError:
             pass
     return None
@@ -169,9 +167,12 @@ def mount_points_for_disk_image(dmgpath):
         if 'image-path' in imageProperties:
             imagepath = imageProperties['image-path']
             if imagepath == dmgpath:
-                for entity in imageProperties.get('system-entities', []):
-                    if 'mount-point' in entity:
-                        mountpoints.append(entity['mount-point'])
+                mountpoints.extend(
+                    entity['mount-point']
+                    for entity in imageProperties.get('system-entities', [])
+                    if 'mount-point' in entity
+                )
+
                 break
     return mountpoints
 
@@ -187,19 +188,18 @@ def mountdmg(dmgpath, use_shadow=False, use_existing_mounts=False,
     mountpoints = []
     dmgname = os.path.basename(dmgpath)
 
-    if use_existing_mounts:
-        # Check if this dmg is already mounted
-        # and if so, bail out and return the mountpoints
-        if diskImageIsMounted(dmgpath):
-            mountpoints = mount_points_for_disk_image(dmgpath)
-            return mountpoints
+    if use_existing_mounts and diskImageIsMounted(dmgpath):
+        mountpoints = mount_points_for_disk_image(dmgpath)
+        return mountpoints
 
     # Attempt to mount the dmg
     stdin = b''
     if dmg_has_sla(dmgpath):
         stdin = b'Y\n'
         display.display_detail(
-            'NOTE: %s has embedded Software License Agreement' % dmgname)
+            f'NOTE: {dmgname} has embedded Software License Agreement'
+        )
+
     cmd = ['/usr/bin/hdiutil', 'attach', dmgpath, '-nobrowse', '-plist']
     if random_mountpoint:
         cmd.extend(['-mountRandom', '/tmp'])
@@ -223,7 +223,7 @@ def mountdmg(dmgpath, use_shadow=False, use_existing_mounts=False,
                 if 'mount-point' in entity:
                     mountpoints.append(entity['mount-point'])
         except PlistReadError as err:
-            display.display_error("%s" % err)
+            display.display_error(f"{err}")
             display.display_error(
                 'Bad plist string returned when mounting diskimage %s:\n%s'
                 % (dmgname, pliststr))
@@ -240,15 +240,15 @@ def unmountdmg(mountpoint):
     (dummy_output, err) = proc.communicate()
     if proc.returncode:
         # ordinary unmount unsuccessful, try forcing
-        display.display_warning('Polite unmount failed: %s' % err)
-        display.display_warning('Attempting to force unmount %s' % mountpoint)
+        display.display_warning(f'Polite unmount failed: {err}')
+        display.display_warning(f'Attempting to force unmount {mountpoint}')
         cmd.append('-force')
         proc = subprocess.Popen(cmd, bufsize=-1, stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE)
         (dummy_output, err) = proc.communicate()
-        if proc.returncode:
-            display.display_warning(
-                'Failed to unmount %s: %s', mountpoint, err.decode("UTF-8"))
+    if proc.returncode:
+        display.display_warning(
+            'Failed to unmount %s: %s', mountpoint, err.decode("UTF-8"))
 
 
 if __name__ == '__main__':

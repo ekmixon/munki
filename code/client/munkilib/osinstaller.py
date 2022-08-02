@@ -112,9 +112,7 @@ def get_os_version(app_path):
     sharedsupport_dmg = os.path.join(
         app_path, 'Contents/SharedSupport/SharedSupport.dmg')
     if os.path.isfile(sharedsupport_dmg):
-        # starting with macOS Big Sur
-        mountpoints = dmgutils.mountdmg(sharedsupport_dmg)
-        if mountpoints:
+        if mountpoints := dmgutils.mountdmg(sharedsupport_dmg):
             info_plist_path = os.path.join(
                 mountpoints[0],
                 "com_apple_MobileAsset_MacSoftwareUpdate",
@@ -138,38 +136,26 @@ def setup_authrestart_if_applicable():
             authrestart.can_attempt_auth_restart()):
         display.display_info(
             'FileVault is active and we can do an authrestart')
-        #os_version_tuple = osutils.getOsVersion(as_tuple=True)
-        if False: # was: os_version_tuple >= (10, 12):
-            # setup delayed auth restart so that when startosinstall does a
-            # restart, it completes without user credentials
-            display.display_info('Setting up delayed authrestart...')
-            authrestartd.setup_delayed_authrestart()
-            # make sure the special secret InstallAssistant preference is not
-            # set
-            CFPreferencesSetValue(
-                'IAQuitInsteadOfReboot', None, '.GlobalPreferences',
-                kCFPreferencesAnyUser, kCFPreferencesCurrentHost)
-        else:
-            #
-            # set an undocumented  preference to tell the osinstaller
-            # process to exit instead of restart
-            # this is the equivalent of:
-            # `defaults write /Library/Preferences/.GlobalPreferences
-            #                 IAQuitInsteadOfReboot -bool YES`
-            #
-            # This preference is referred to in a framework inside the
-            # Install macOS.app:
-            # Contents/Frameworks/OSInstallerSetup.framework/Versions/A/
-            #     Frameworks/OSInstallerSetupInternal.framework/Versions/A/
-            #     OSInstallerSetupInternal
-            #
-            # It might go away in future versions of the macOS installer.
-            #
-            display.display_info(
-                'Configuring startosinstall to quit instead of restart...')
-            CFPreferencesSetValue(
-                'IAQuitInsteadOfReboot', True, '.GlobalPreferences',
-                kCFPreferencesAnyUser, kCFPreferencesCurrentHost)
+        #
+        # set an undocumented  preference to tell the osinstaller
+        # process to exit instead of restart
+        # this is the equivalent of:
+        # `defaults write /Library/Preferences/.GlobalPreferences
+        #                 IAQuitInsteadOfReboot -bool YES`
+        #
+        # This preference is referred to in a framework inside the
+        # Install macOS.app:
+        # Contents/Frameworks/OSInstallerSetup.framework/Versions/A/
+        #     Frameworks/OSInstallerSetupInternal.framework/Versions/A/
+        #     OSInstallerSetupInternal
+        #
+        # It might go away in future versions of the macOS installer.
+        #
+        display.display_info(
+            'Configuring startosinstall to quit instead of restart...')
+        CFPreferencesSetValue(
+            'IAQuitInsteadOfReboot', True, '.GlobalPreferences',
+            kCFPreferencesAnyUser, kCFPreferencesCurrentHost)
 
 
 class StartOSInstallError(Exception):
@@ -225,30 +211,27 @@ class StartOSInstallRunner(object):
         '''Mounts dmgpath and returns path to the Install macOS.app'''
         if itempath.endswith('.app'):
             return itempath
-        if pkgutils.hasValidDiskImageExt(itempath):
-            display.display_status_minor(
-                'Mounting disk image %s' % os.path.basename(itempath))
-            mountpoints = dmgutils.mountdmg(itempath, random_mountpoint=False)
-            if mountpoints:
-                # look in the first mountpoint for apps
-                self.dmg_mountpoint = mountpoints[0]
-                app_path = find_install_macos_app(self.dmg_mountpoint)
-                if app_path:
-                    # leave dmg mounted
-                    return app_path
-                # if we get here we didn't find an Install macOS.app with the
-                # expected contents
-                dmgutils.unmountdmg(self.dmg_mountpoint)
-                self.dmg_mountpoint = None
-                raise StartOSInstallError(
-                    'Valid Install macOS.app not found on %s' % itempath)
-            else:
-                raise StartOSInstallError(
-                    u'No filesystems mounted from %s' % itempath)
-        else:
+        if not pkgutils.hasValidDiskImageExt(itempath):
             raise StartOSInstallError(
                 u'%s doesn\'t appear to be an application or disk image'
                 % itempath)
+        display.display_status_minor(
+            f'Mounting disk image {os.path.basename(itempath)}'
+        )
+
+        if mountpoints := dmgutils.mountdmg(itempath, random_mountpoint=False):
+            # look in the first mountpoint for apps
+            self.dmg_mountpoint = mountpoints[0]
+            if app_path := find_install_macos_app(self.dmg_mountpoint):
+                # leave dmg mounted
+                return app_path
+            # if we get here we didn't find an Install macOS.app with the
+            # expected contents
+            dmgutils.unmountdmg(self.dmg_mountpoint)
+            self.dmg_mountpoint = None
+            raise StartOSInstallError(f'Valid Install macOS.app not found on {itempath}')
+        else:
+            raise StartOSInstallError(f'No filesystems mounted from {itempath}')
 
     def start(self):
         '''Starts a macOS install from an Install macOS.app stored at the root
@@ -362,19 +345,18 @@ class StartOSInstallRunner(object):
             if not info_output:
                 if job.returncode() is not None:
                     break
-                else:
-                    # no data, but we're still running
-                    inactive += 1
-                    if inactive >= timeout:
-                        # no output for too long, kill the job
-                        display.display_error(
-                            "startosinstall timeout after %d seconds"
-                            % timeout)
-                        job.stop()
-                        break
-                    # sleep a bit before checking for more output
-                    time.sleep(1)
-                    continue
+                # no data, but we're still running
+                inactive += 1
+                if inactive >= timeout:
+                    # no output for too long, kill the job
+                    display.display_error(
+                        "startosinstall timeout after %d seconds"
+                        % timeout)
+                    job.stop()
+                    break
+                # sleep a bit before checking for more output
+                time.sleep(1)
+                continue
 
             # we got non-empty output, reset inactive timer
             inactive = 0
@@ -425,32 +407,35 @@ class StartOSInstallRunner(object):
         #if self.dmg_mountpoint:
         #    dmgutils.unmountdmg(self.dmg_mountpoint)
 
-        if retcode and not (retcode == 255 and self.got_sigusr1):
+        if retcode and (retcode != 255 or not self.got_sigusr1):
             # append stderr to our startosinstall_output
             if job.stderr:
                 startosinstall_output.extend(job.stderr.read().splitlines())
             display.display_status_minor(
-                "Starting macOS install failed with return code %s" % retcode)
+                f"Starting macOS install failed with return code {retcode}"
+            )
+
             display.display_error("-"*78)
             for line in startosinstall_output:
                 display.display_error(line.rstrip("\n"))
             display.display_error("-"*78)
-            raise StartOSInstallError(
-                'startosinstall failed with return code %s' % retcode)
+            raise StartOSInstallError(f'startosinstall failed with return code {retcode}')
         elif self.got_sigusr1:
             # startosinstall got far enough along to signal us it was ready
             # to finish and reboot, so we can believe it was successful
             munkilog.log('macOS install successfully set up.')
             munkilog.log(
-                'Starting macOS install of %s: SUCCESSFUL' % os_vers_to_install,
-                'Install.log')
+                f'Starting macOS install of {os_vers_to_install}: SUCCESSFUL',
+                'Install.log',
+            )
+
             # previously we checked if retcode == 255:
             # that may have been something specific to 10.12's startosinstall
             # if startosinstall exited after sending us sigusr1 we should
             # handle the restart.
             if retcode not in (0, 255):
                 # some logging for possible investigation in the future
-                munkilog.log('startosinstall exited %s' % retcode)
+                munkilog.log(f'startosinstall exited {retcode}')
             munkilog.log('startosinstall quit instead of rebooted; we will '
                          'do restart.')
             # clear our special secret InstallAssistant preference
@@ -470,15 +455,14 @@ class StartOSInstallRunner(object):
 def get_catalog_info(mounted_dmgpath):
     '''Returns catalog info (pkginfo) for a macOS installer on a disk
     image'''
-    app_path = find_install_macos_app(mounted_dmgpath)
-    if app_path:
+    if app_path := find_install_macos_app(mounted_dmgpath):
         vers = get_os_version(app_path)
         minimum_munki_version = '3.0.0.3211'
         minimum_os_version = '10.8'
         if vers:
             display_name = os.path.splitext(os.path.basename(app_path))[0]
             name = display_name.replace(' ', '_')
-            description = 'Installs macOS version %s' % vers
+            description = f'Installs macOS version {vers}'
             if vers.startswith('10.12'):
                 # Sierra was 8.8GB at http://www.apple.com/macos/how-to-upgrade/
                 # (http://web.archive.org/web/20160910163424/
@@ -547,8 +531,7 @@ def startosinstall(installer, finishing_tasks=None, installinfo=None):
     except StartOSInstallError as err:
         display.display_error(
             u'Error starting macOS install: %s', err)
-        munkilog.log(
-            u'Starting macOS install: FAILED: %s' % err, 'Install.log')
+        munkilog.log(f'Starting macOS install: FAILED: {err}', 'Install.log')
         return False
 
 
@@ -561,39 +544,38 @@ def run(finishing_tasks=None):
     try:
         installinfo = FoundationPlist.readPlist(installinfopath)
     except FoundationPlist.NSPropertyListSerializationException:
-        display.display_error("Invalid %s" % installinfopath)
+        display.display_error(f"Invalid {installinfopath}")
         return False
 
     if prefs.pref('SuppressStopButtonOnInstall'):
         munkistatus.hideStopButton()
 
     success = False
-    if "managed_installs" in installinfo:
-        if not processes.stop_requested():
-            # filter list to items that need to be installed
-            installlist = [
-                item for item in installinfo['managed_installs']
-                if item.get('installer_type') == 'startosinstall']
-            if installlist:
-                munkilog.log("### Beginning os installer session ###")
-                item = installlist[0]
-                if not 'installer_item' in item:
-                    display.display_error(
-                        'startosinstall item is missing installer_item.')
-                    return False
-                display.display_status_major('Starting macOS upgrade...')
-                # set indeterminate progress bar
-                munkistatus.percent(-1)
-                # remove the InstallInfo.plist since it won't be valid
-                # after the upgrade
-                try:
-                    os.unlink(installinfopath)
-                except (OSError, IOError):
-                    pass
-                itempath = os.path.join(cachedir, item["installer_item"])
-                success = startosinstall(
-                    itempath,
-                    finishing_tasks=finishing_tasks, installinfo=item)
+    if "managed_installs" in installinfo and not processes.stop_requested():
+        if installlist := [
+            item
+            for item in installinfo['managed_installs']
+            if item.get('installer_type') == 'startosinstall'
+        ]:
+            munkilog.log("### Beginning os installer session ###")
+            item = installlist[0]
+            if 'installer_item' not in item:
+                display.display_error(
+                    'startosinstall item is missing installer_item.')
+                return False
+            display.display_status_major('Starting macOS upgrade...')
+            # set indeterminate progress bar
+            munkistatus.percent(-1)
+            # remove the InstallInfo.plist since it won't be valid
+            # after the upgrade
+            try:
+                os.unlink(installinfopath)
+            except (OSError, IOError):
+                pass
+            itempath = os.path.join(cachedir, item["installer_item"])
+            success = startosinstall(
+                itempath,
+                finishing_tasks=finishing_tasks, installinfo=item)
     munkilog.log("### Ending os installer session ###")
     return success
 

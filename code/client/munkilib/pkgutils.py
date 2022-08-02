@@ -134,9 +134,7 @@ class MunkiLooseVersion(version.LooseVersion):
                 cmp_result = _cmp(value, other_cmp_version[index])
             except TypeError:
                 # integer is less than character/string
-                if isinstance(value, int):
-                    return -1
-                return 1
+                return -1 if isinstance(value, int) else 1
             else:
                 if cmp_result:
                     return cmp_result
@@ -177,7 +175,7 @@ def padVersionString(versString, tupleCount):
         versString = '0'
     components = str(versString).split('.')
     if len(components) > tupleCount:
-        components = components[0:tupleCount]
+        components = components[:tupleCount]
     else:
         while len(components) < tupleCount:
             components.append('0')
@@ -206,25 +204,25 @@ def getVersionString(plist, key=None):
     # default to CFBundleShortVersionString plus magic
     # and workarounds and edge case cleanups
     key = 'CFBundleShortVersionString'
-    if not 'CFBundleShortVersionString' in plist:
-        if 'Bundle versions string, short' in plist:
-            # workaround for broken Composer packages
-            # where the key is actually named
-            # 'Bundle versions string, short' instead of
-            # 'CFBundleShortVersionString'
-            key = 'Bundle versions string, short'
+    if (
+        'CFBundleShortVersionString' not in plist
+        and 'Bundle versions string, short' in plist
+    ):
+        # workaround for broken Composer packages
+        # where the key is actually named
+        # 'Bundle versions string, short' instead of
+        # 'CFBundleShortVersionString'
+        key = 'Bundle versions string, short'
     if plist.get(key):
         # return key value up to first space
         # lets us use crappy values like '1.0 (100)'
         VersionString = plist[key].split()[0]
-    if VersionString:
-        # check first character to see if it's a digit
-        if VersionString[0] in '0123456789':
-            # starts with a number; that's good
-            # now for another edge case thanks to Adobe:
-            # replace commas with periods
-            VersionString = VersionString.replace(',', '.')
-            return VersionString
+    if VersionString and VersionString[0] in '0123456789':
+        # starts with a number; that's good
+        # now for another edge case thanks to Adobe:
+        # replace commas with periods
+        VersionString = VersionString.replace(',', '.')
+        return VersionString
     if plist.get('CFBundleVersion'):
         # no CFBundleShortVersionString, or bad one
         # a future version of the Munki tools may drop this magic
@@ -253,8 +251,7 @@ def getBundleInfo(path):
 
     if os.path.exists(infopath):
         try:
-            plist = FoundationPlist.readPlist(infopath)
-            return plist
+            return FoundationPlist.readPlist(infopath)
         except FoundationPlist.NSPropertyListSerializationException:
             pass
 
@@ -263,8 +260,7 @@ def getBundleInfo(path):
 
 def getAppBundleExecutable(bundlepath):
     """Returns path to the actual executable in an app bundle or None"""
-    plist = getBundleInfo(bundlepath)
-    if plist:
+    if plist := getBundleInfo(bundlepath):
         if 'CFBundleExecutable' in plist:
             executable = plist['CFBundleExecutable']
         elif 'CFBundleName' in plist:
@@ -281,9 +277,8 @@ def parseInfoFile(infofile):
     '''Returns a dict of keys and values parsed from an .info file
     At least some of these old files use MacRoman encoding...'''
     infodict = {}
-    fileobj = open(infofile, mode='rb')
-    info = fileobj.read()
-    fileobj.close()
+    with open(infofile, mode='rb') as fileobj:
+        info = fileobj.read()
     infolines = info.splitlines()
     for line in infolines:
         try:
@@ -312,10 +307,8 @@ def getBundleVersion(bundlepath, key=None):
     Specify key to use a specific key in the Info.plist for
     the version string.
     """
-    plist = getBundleInfo(bundlepath)
-    if plist:
-        versionstring = getVersionString(plist, key)
-        if versionstring:
+    if plist := getBundleInfo(bundlepath):
+        if versionstring := getVersionString(plist, key):
             return versionstring
 
     # no version number in Info.plist. Maybe old-style package?
@@ -337,19 +330,17 @@ def parsePkgRefs(filename, path_to_pkg=None):
     to get info on included sub-packages"""
     info = []
     dom = minidom.parse(filename)
-    pkgrefs = dom.getElementsByTagName('pkg-info')
-    if pkgrefs:
+    if pkgrefs := dom.getElementsByTagName('pkg-info'):
         # this is a PackageInfo file
         for ref in pkgrefs:
             keys = list(ref.attributes.keys())
             if 'identifier' in keys and 'version' in keys:
-                pkginfo = {}
-                pkginfo['packageid'] = \
-                       ref.attributes['identifier'].value
-                pkginfo['version'] = \
-                    ref.attributes['version'].value
-                payloads = ref.getElementsByTagName('payload')
-                if payloads:
+                pkginfo = {
+                    'packageid': ref.attributes['identifier'].value,
+                    'version': ref.attributes['version'].value,
+                }
+
+                if payloads := ref.getElementsByTagName('payload'):
                     keys = list(payloads[0].attributes.keys())
                     if 'installKBytes' in keys:
                         pkginfo['installed_size'] = int(float(
@@ -357,52 +348,48 @@ def parsePkgRefs(filename, path_to_pkg=None):
                                 'installKBytes'].value))
                     if pkginfo not in info:
                         info.append(pkginfo)
-                # if there isn't a payload, no receipt is left by a flat
-                # pkg, so don't add this to the info array
-    else:
-        pkgrefs = dom.getElementsByTagName('pkg-ref')
-        if pkgrefs:
-            # this is a Distribution or .dist file
-            pkgref_dict = {}
-            for ref in pkgrefs:
-                keys = list(ref.attributes.keys())
-                if 'id' in keys:
-                    pkgid = ref.attributes['id'].value
-                    if not pkgid in pkgref_dict:
-                        pkgref_dict[pkgid] = {'packageid': pkgid}
-                    if 'version' in keys:
-                        pkgref_dict[pkgid]['version'] = \
-                            ref.attributes['version'].value
-                    if 'installKBytes' in keys:
-                        pkgref_dict[pkgid]['installed_size'] = int(float(
-                            ref.attributes['installKBytes'].value))
-                    if ref.firstChild:
-                        text = ref.firstChild.wholeText
-                        if text.endswith('.pkg'):
-                            if text.startswith('file:'):
-                                relativepath = unquote(text[5:])
-                                pkgdir = os.path.dirname(
-                                    path_to_pkg or filename)
-                                pkgref_dict[pkgid]['file'] = os.path.join(
-                                    pkgdir, relativepath)
-                            else:
-                                if text.startswith('#'):
-                                    text = text[1:]
-                                relativepath = unquote(text)
-                                thisdir = os.path.dirname(filename)
-                                pkgref_dict[pkgid]['file'] = os.path.join(
-                                    thisdir, relativepath)
+                            # if there isn't a payload, no receipt is left by a flat
+                            # pkg, so don't add this to the info array
+    elif pkgrefs := dom.getElementsByTagName('pkg-ref'):
+        # this is a Distribution or .dist file
+        pkgref_dict = {}
+        for ref in pkgrefs:
+            keys = list(ref.attributes.keys())
+            if 'id' in keys:
+                pkgid = ref.attributes['id'].value
+                if pkgid not in pkgref_dict:
+                    pkgref_dict[pkgid] = {'packageid': pkgid}
+                if 'version' in keys:
+                    pkgref_dict[pkgid]['version'] = \
+                        ref.attributes['version'].value
+                if 'installKBytes' in keys:
+                    pkgref_dict[pkgid]['installed_size'] = int(float(
+                        ref.attributes['installKBytes'].value))
+                if ref.firstChild:
+                    text = ref.firstChild.wholeText
+                    if text.endswith('.pkg'):
+                        if text.startswith('file:'):
+                            relativepath = unquote(text[5:])
+                            pkgdir = os.path.dirname(
+                                path_to_pkg or filename)
+                            pkgref_dict[pkgid]['file'] = os.path.join(
+                                pkgdir, relativepath)
+                        else:
+                            if text.startswith('#'):
+                                text = text[1:]
+                            relativepath = unquote(text)
+                            thisdir = os.path.dirname(filename)
+                            pkgref_dict[pkgid]['file'] = os.path.join(
+                                thisdir, relativepath)
 
-            for key in pkgref_dict:
-                pkgref = pkgref_dict[key]
+        for key, pkgref in pkgref_dict.items():
+            if 'file' in pkgref and os.path.exists(pkgref['file']):
+                info.extend(getReceiptInfo(pkgref['file']))
+                continue
+            if 'version' in pkgref:
                 if 'file' in pkgref:
-                    if os.path.exists(pkgref['file']):
-                        info.extend(getReceiptInfo(pkgref['file']))
-                        continue
-                if 'version' in pkgref:
-                    if 'file' in pkgref:
-                        del pkgref['file']
-                    info.append(pkgref_dict[key])
+                    del pkgref['file']
+                info.append(pkgref_dict[key])
 
     return info
 
@@ -488,11 +475,15 @@ def getFlatPackageInfo(pkgpath):
 def getBomList(pkgpath):
     '''Gets bom listing from pkgpath, which should be a path
     to a bundle-style package'''
-    bompath = None
-    for item in osutils.listdir(os.path.join(pkgpath, 'Contents')):
-        if item.endswith('.bom'):
-            bompath = os.path.join(pkgpath, 'Contents', item)
-            break
+    bompath = next(
+        (
+            os.path.join(pkgpath, 'Contents', item)
+            for item in osutils.listdir(os.path.join(pkgpath, 'Contents'))
+            if item.endswith('.bom')
+        ),
+        None,
+    )
+
     if not bompath:
         for item in osutils.listdir(os.path.join(pkgpath, 'Contents', 'Resources')):
             if item.endswith('.bom'):
@@ -512,8 +503,7 @@ def getBomList(pkgpath):
 def getOnePackageInfo(pkgpath):
     """Gets receipt info for a single bundle-style package"""
     pkginfo = {}
-    plist = getBundleInfo(pkgpath)
-    if plist:
+    if plist := getBundleInfo(pkgpath):
         pkginfo['filename'] = os.path.basename(pkgpath)
         try:
             if 'CFBundleIdentifier' in plist:
@@ -533,15 +523,8 @@ def getOnePackageInfo(pkgpath):
             pkginfo['version'] = getBundleVersion(pkgpath)
         except (AttributeError,
                 FoundationPlist.NSPropertyListSerializationException):
-            pkginfo['packageid'] = 'BAD PLIST in %s' % \
-                                    os.path.basename(pkgpath)
+            pkginfo['packageid'] = f'BAD PLIST in {os.path.basename(pkgpath)}'
             pkginfo['version'] = '0.0'
-        ## now look for applications to suggest for blocking_applications
-        #bomlist = getBomList(pkgpath)
-        #if bomlist:
-        #    pkginfo['apps'] = [os.path.basename(item) for item in bomlist
-        #                        if item.endswith('.app')]
-
     else:
         # look for old-style .info files!
         infopath = os.path.join(
@@ -564,8 +547,7 @@ def getBundlePackageInfo(pkgpath):
     infoarray = []
 
     if pkgpath.endswith('.pkg'):
-        pkginfo = getOnePackageInfo(pkgpath)
-        if pkginfo:
+        if pkginfo := getOnePackageInfo(pkgpath):
             infoarray.append(pkginfo)
             return infoarray
 
@@ -579,13 +561,12 @@ def getBundlePackageInfo(pkgpath):
 
         # no .dist file found, look for packages in subdirs
         dirsToSearch = []
-        plist = getBundleInfo(pkgpath)
-        if plist:
+        if plist := getBundleInfo(pkgpath):
             if 'IFPkgFlagComponentDirectory' in plist:
                 componentdir = plist['IFPkgFlagComponentDirectory']
                 dirsToSearch.append(componentdir)
 
-        if dirsToSearch == []:
+        if not dirsToSearch:
             dirsToSearch = ['', 'Contents', 'Contents/Installers',
                             'Contents/Packages', 'Contents/Resources',
                             'Contents/Resources/Packages']
@@ -596,12 +577,10 @@ def getBundlePackageInfo(pkgpath):
                     itempath = os.path.join(searchdir, item)
                     if os.path.isdir(itempath):
                         if itempath.endswith('.pkg'):
-                            pkginfo = getOnePackageInfo(itempath)
-                            if pkginfo:
+                            if pkginfo := getOnePackageInfo(itempath):
                                 infoarray.append(pkginfo)
                         elif itempath.endswith('.mpkg'):
-                            pkginfo = getBundlePackageInfo(itempath)
-                            if pkginfo:
+                            if pkginfo := getBundlePackageInfo(itempath):
                                 infoarray.extend(pkginfo)
 
     return infoarray
@@ -611,7 +590,7 @@ def getReceiptInfo(pkgname):
     """Get receipt info from a package"""
     info = []
     if hasValidPackageExt(pkgname):
-        display.display_debug2('Examining %s' % pkgname)
+        display.display_debug2(f'Examining {pkgname}')
         if os.path.isfile(pkgname):       # new flat package
             info = getFlatPackageInfo(pkgname)
 
@@ -637,9 +616,7 @@ def getInstalledPackageVersion(pkgid):
                              '--pkg-info-plist', pkgid],
                             stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE)
-    out = proc.communicate()[0]
-
-    if out:
+    if out := proc.communicate()[0]:
         try:
             plist = FoundationPlist.readPlistFromString(out)
         except FoundationPlist.NSPropertyListSerializationException:
@@ -660,15 +637,17 @@ def getInstalledPackageVersion(pkgid):
         highestversion = '0'
         for item in installitems:
             if item.endswith('.pkg'):
-                info = getBundlePackageInfo(os.path.join(receiptsdir, item))
-                if info:
+                if info := getBundlePackageInfo(
+                    os.path.join(receiptsdir, item)
+                ):
                     infoitem = info[0]
                     foundbundleid = infoitem['packageid']
                     foundvers = infoitem['version']
-                    if pkgid == foundbundleid:
-                        if (MunkiLooseVersion(foundvers) >
-                                MunkiLooseVersion(highestversion)):
-                            highestversion = foundvers
+                    if pkgid == foundbundleid and (
+                        MunkiLooseVersion(foundvers)
+                        > MunkiLooseVersion(highestversion)
+                    ):
+                        highestversion = foundvers
 
         if highestversion != '0':
             display.display_debug2('\tThis machine has %s, version %s',
@@ -706,11 +685,9 @@ def nameAndVersion(aString):
     'AdobePhotoshopCS3-11.2.1' becomes ('AdobePhotoshopCS3', '11.2.1')
     'MicrosoftOffice2008v12.2.1' becomes ('MicrosoftOffice2008', '12.2.1')
     """
-    # first try regex
-    m = re.search(r'[0-9]+(\.[0-9]+)((\.|a|b|d|v)[0-9]+)+', aString)
-    if m:
-        vers = m.group(0)
-        name = aString[0:aString.find(vers)].rstrip(' .-_v')
+    if m := re.search(r'[0-9]+(\.[0-9]+)((\.|a|b|d|v)[0-9]+)+', aString):
+        vers = m[0]
+        name = aString[:aString.find(vers)].rstrip(' .-_v')
         return (name, vers)
 
     # try another way
@@ -734,12 +711,12 @@ def nameAndVersion(aString):
         # reach a digit (because we might have characters in '._abdv'
         # at the start)
         for char in possibleVersion:
-            if not char in '0123456789':
+            if char not in '0123456789':
                 index += 1
             else:
                 break
         vers = aString[index:]
-        return (aString[0:index].rstrip(' .-_v'), vers)
+        return aString[:index].rstrip(' .-_v'), vers
     # no version number found,
     # just return original string and empty string
     return (aString, '')
@@ -776,8 +753,7 @@ def getChoiceChangesXML(pkgitem):
         proc = subprocess.Popen(
             ['/usr/sbin/installer', '-showChoiceChangesXML', '-pkg', pkgitem],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        out = proc.communicate()[0]
-        if out:
+        if out := proc.communicate()[0]:
             plist = FoundationPlist.readPlistFromString(out)
 
             # list comprehension to populate choices with those items
@@ -833,18 +809,16 @@ def getPackageMetaData(pkgitem):
             # note this is in KBytes
             installedsize += infoitem['installed_size']
 
-    if metaversion == '0.0.0.0.0':
+    if (
+        metaversion == '0.0.0.0.0'
+        or metaversion != '0.0.0.0.0'
+        and len(receiptinfo) == 1
+        or metaversion != '0.0.0.0.0'
+        and len(receiptinfo) != 1
+        and highestpkgversion.startswith(metaversion)
+    ):
         metaversion = highestpkgversion
-    elif len(receiptinfo) == 1:
-        # there is only one package in this item
-        metaversion = highestpkgversion
-    elif highestpkgversion.startswith(metaversion):
-        # for example, highestpkgversion is 2.0.3124.0,
-        # version in filename is 2.0
-        metaversion = highestpkgversion
-
-    cataloginfo = {}
-    cataloginfo['name'] = nameAndVersion(shortname)[0]
+    cataloginfo = {'name': nameAndVersion(shortname)[0]}
     cataloginfo['version'] = metaversion
     for key in ('display_name', 'RestartAction', 'description'):
         if key in installerinfo:
@@ -878,14 +852,13 @@ def getInstalledPackages():
     out = proc.communicate()[0]
     while out:
         (pliststr, out) = utils.getFirstPlist(out)
-        if pliststr:
-            plist = FoundationPlist.readPlistFromString(pliststr)
-            if 'pkg-version' in plist and 'pkgid' in plist:
-                installedpkgs[plist['pkgid']] = (
-                    plist['pkg-version'] or '0.0.0.0.0')
-        else:
+        if not pliststr:
             break
 
+        plist = FoundationPlist.readPlistFromString(pliststr)
+        if 'pkg-version' in plist and 'pkgid' in plist:
+            installedpkgs[plist['pkgid']] = (
+                plist['pkg-version'] or '0.0.0.0.0')
     # Now check /Library/Receipts
     receiptsdir = '/Library/Receipts'
     if os.path.exists(receiptsdir):
@@ -897,7 +870,7 @@ def getInstalledPackages():
                 pkgid = pkginfo.get('packageid')
                 thisversion = pkginfo.get('version')
                 if pkgid:
-                    if not pkgid in installedpkgs:
+                    if pkgid not in installedpkgs:
                         installedpkgs[pkgid] = thisversion
                     else:
                         # pkgid is already in our list. There must be
@@ -925,13 +898,12 @@ def isApplication(pathname):
     if pathname.endswith('.app'):
         return True
     if os.path.isdir(pathname):
-        # look for app bundle structure
-        # use Info.plist to determine the name of the executable
-        plist = getBundleInfo(pathname)
-        if plist:
-            if 'CFBundlePackageType' in plist:
-                if plist['CFBundlePackageType'] != 'APPL':
-                    return False
+        if plist := getBundleInfo(pathname):
+            if (
+                'CFBundlePackageType' in plist
+                and plist['CFBundlePackageType'] != 'APPL'
+            ):
+                return False
             # get CFBundleExecutable,
             # falling back to bundle name if it's missing
             bundleexecutable = plist.get(

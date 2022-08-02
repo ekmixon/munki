@@ -84,7 +84,7 @@ def remove_copied_items(itemlist):
             break
         path_to_remove = os.path.join(destpath, os.path.basename(itemname))
         if os.path.exists(path_to_remove):
-            display.display_status_minor('Removing %s' % path_to_remove)
+            display.display_status_minor(f'Removing {path_to_remove}')
             retcode = subprocess.call(['/bin/rm', '-rf', path_to_remove])
             if retcode:
                 display.display_error(
@@ -108,18 +108,20 @@ def item_prereqs_in_skipped_items(item, skipped_items):
         return []
 
     display.display_debug1(
-        'Checking for skipped prerequisites for %s-%s'
-        % (item['name'], item.get('version_to_install')))
+        f"Checking for skipped prerequisites for {item['name']}-{item.get('version_to_install')}"
+    )
+
 
     # get list of prerequisites for this item
     prerequisites = item.get('requires', [])
     prerequisites.extend(item.get('update_for', []))
     if not prerequisites:
         display.display_debug1(
-            '%s-%s has no prerequisites.'
-            % (item['name'], item.get('version_to_install')))
+            f"{item['name']}-{item.get('version_to_install')} has no prerequisites."
+        )
+
         return []
-    display.display_debug1('Prerequisites: %s' % ", ".join(prerequisites))
+    display.display_debug1(f'Prerequisites: {", ".join(prerequisites)}')
 
     # build a dictionary of names and versions of skipped items
     skipped_item_dict = {}
@@ -151,8 +153,7 @@ def item_prereqs_in_skipped_items(item, skipped_items):
 
 def requires_restart(item):
     '''Returns boolean to indicate if the item needs a restart'''
-    return (item.get("RestartAction") == "RequireRestart" or
-            item.get("RestartAction") == "RecommendRestart")
+    return item.get("RestartAction") in ["RequireRestart", "RecommendRestart"]
 
 
 def handle_apple_package_install(item, itempath):
@@ -162,8 +163,7 @@ def handle_apple_package_install(item, itempath):
     display.display_debug1(
         "suppress_bundle_relocation: %s", suppress_bundle_relocation)
     if pkgutils.hasValidDiskImageExt(itempath):
-        display.display_status_minor(
-            "Mounting disk image %s" % item["installer_item"])
+        display.display_status_minor(f'Mounting disk image {item["installer_item"]}')
         mount_with_shadow = suppress_bundle_relocation
         # we need to mount the diskimage as read/write to be able to
         # modify the package to suppress bundle relocation
@@ -198,8 +198,7 @@ def handle_apple_package_install(item, itempath):
         needs_restart = needtorestart or requires_restart(item)
     else:
         # we didn't find anything we know how to install
-        munkilog.log(
-            "Found nothing we know how to install in %s" % itempath)
+        munkilog.log(f"Found nothing we know how to install in {itempath}")
         retcode = -99
 
     return (retcode, needs_restart)
@@ -239,8 +238,9 @@ def install_with_info(
                     'application(s) running.' % item['name'])
                 continue
 
-        skipped_prereqs = item_prereqs_in_skipped_items(item, skipped_installs)
-        if skipped_prereqs:
+        if skipped_prereqs := item_prereqs_in_skipped_items(
+            item, skipped_installs
+        ):
             # one or more prerequisite for this item was skipped or failed;
             # need to skip this item too
             skipped_installs.append(item)
@@ -260,8 +260,9 @@ def install_with_info(
         display_name = item.get('display_name') or item.get('name')
         version_to_install = item.get('version_to_install', '')
         display.display_status_major(
-            "Installing %s (%s of %s)"
-            % (display_name, itemindex, len(installlist)))
+            f"Installing {display_name} ({itemindex} of {len(installlist)})"
+        )
+
 
         retcode = 0
         if 'preinstall_script' in item:
@@ -286,17 +287,14 @@ def install_with_info(
                     # Adobe Setup says restart needed.
                     restartflag = True
                     retcode = 0
-            # copy_from_dmg install
             elif installer_type == "copy_from_dmg":
                 retcode = dmg.copy_from_dmg(itempath, item.get('items_to_copy'))
                 if retcode == 0 and requires_restart(item):
                     restartflag = True
-            # appdmg install (deprecated)
             elif installer_type == "appdmg":
                 display.display_warning(
                     "install_type 'appdmg' is deprecated. Use 'copy_from_dmg'.")
                 retcode = dmg.copy_app_from_dmg(itempath)
-            # configuration profile install
             elif installer_type == 'profile':
                 # profiles.install_profile returns True/False
                 retcode = 0
@@ -305,17 +303,13 @@ def install_with_info(
                     retcode = -1
                 if retcode == 0 and requires_restart(item):
                     restartflag = True
-            # nopkg (Packageless) install
             elif installer_type == "nopkg":
                 restartflag = restartflag or requires_restart(item)
-            # unknown installer_type
             elif installer_type != "":
                 # we've encountered an installer type
                 # we don't know how to handle
-                display.display_error(
-                    "Unsupported install type: %s" % installer_type)
+                display.display_error(f"Unsupported install type: {installer_type}")
                 retcode = -99
-            # better be Apple installer package
             else:
                 (retcode, need_to_restart) = handle_apple_package_install(
                     item, itempath)
@@ -336,8 +330,9 @@ def install_with_info(
                 # since the item has been installed via package/disk image
                 # but admin should be notified
                 display.display_warning(
-                    'Postinstall script for %s returned %s'
-                    % (item['name'], retcode))
+                    f"Postinstall script for {item['name']} returned {retcode}"
+                )
+
                 # reset retcode to 0 so we will mark this install
                 # as successful
                 retcode = 0
@@ -348,7 +343,7 @@ def install_with_info(
             manifestutils.remove_from_selfserve_installs(item['name'])
 
         # record install success/failure
-        if not 'InstallResults' in reports.report:
+        if 'InstallResults' not in reports.report:
             reports.report['InstallResults'] = []
 
         if applesus:
@@ -359,7 +354,7 @@ def install_with_info(
         if retcode == 0:
             status = "SUCCESSFUL"
         else:
-            status = "FAILED with return code: %s" % retcode
+            status = f"FAILED with return code: {retcode}"
             # add this failed install to the skipped_installs list
             # so that any item later in the list that requires this
             # item is skipped as well.
@@ -449,7 +444,9 @@ def skipped_items_that_require_this(item, skipped_items):
         return []
 
     display.display_debug1(
-        'Checking for skipped items that require %s' % item['name'])
+        f"Checking for skipped items that require {item['name']}"
+    )
+
 
     matched_skipped_items = []
     for skipped_item in skipped_items:
@@ -457,8 +454,9 @@ def skipped_items_that_require_this(item, skipped_items):
         prerequisites = skipped_item.get('requires', [])
         prerequisites.extend(skipped_item.get('update_for', []))
         display.display_debug1(
-            '%s has these prerequisites: %s'
-            % (skipped_item['name'], ', '.join(prerequisites)))
+            f"{skipped_item['name']} has these prerequisites: {', '.join(prerequisites)}"
+        )
+
         for prereq in prerequisites:
             (prereq_name, dummy_version) = catalogs.split_name_and_version(
                 prereq)

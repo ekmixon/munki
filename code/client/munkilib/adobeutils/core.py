@@ -48,7 +48,7 @@ def get_pdapp_log_path():
     user = osutils.getconsoleuser()
     if not user or user == u'loginwindow':
         user = 'root'
-    return os.path.expanduser('~%s/Library/Logs/PDApp.log' % user)
+    return os.path.expanduser(f'~{user}/Library/Logs/PDApp.log')
 
 
 def rotate_pdapp_log():
@@ -60,16 +60,16 @@ def rotate_pdapp_log():
     pdapplog_path = get_pdapp_log_path()
     if os.path.exists(pdapplog_path):
         logdir = os.path.dirname(pdapplog_path)
-        newlogname = os.path.join(logdir, 'PDApp %s.log' % timestamp_string)
+        newlogname = os.path.join(logdir, f'PDApp {timestamp_string}.log')
         index = 1
         while os.path.exists(newlogname):
-            alternate_string = '%s_%s' % (timestamp_string, str(index))
+            alternate_string = f'{timestamp_string}_{str(index)}'
             index += 1
-            newlogname = os.path.join(logdir, 'PDApp %s.log' % alternate_string)
+            newlogname = os.path.join(logdir, f'PDApp {alternate_string}.log')
         try:
             os.rename(pdapplog_path, newlogname)
         except OSError as err:
-            munkilog.log(u'Could not rotate PDApp.log: %s' % err)
+            munkilog.log(f'Could not rotate PDApp.log: {err}')
 
 
 class AdobeInstallProgressMonitor(object):
@@ -97,22 +97,28 @@ class AdobeInstallProgressMonitor(object):
         proc = subprocess.Popen(['/bin/ls', '-t1', logpath],
                                 bufsize=-1, stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE)
-        output = proc.communicate()[0].decode('UTF-8')
-        if output:
+        if output := proc.communicate()[0].decode('UTF-8'):
             firstitem = output.splitlines()[0]
             if firstitem.endswith(".log"):
                 # store path of most recently modified log file
                 recent_adobe_log = os.path.join(logpath, firstitem)
         # if PDApp.log is newer, return that, otherwise, return newest
         # log file in /Library/Logs/Adobe/Installers
-        if recent_adobe_log and os.path.exists(recent_adobe_log):
-            if (not os.path.exists(pdapp_log_path) or
-                    (os.path.getmtime(pdapp_log_path) <
-                     os.path.getmtime(recent_adobe_log))):
-                return recent_adobe_log
-        if os.path.exists(pdapp_log_path):
-            return pdapp_log_path
-        return None
+        if (
+            recent_adobe_log
+            and os.path.exists(recent_adobe_log)
+            and (
+                (
+                    not os.path.exists(pdapp_log_path)
+                    or (
+                        os.path.getmtime(pdapp_log_path)
+                        < os.path.getmtime(recent_adobe_log)
+                    )
+                )
+            )
+        ):
+            return recent_adobe_log
+        return pdapp_log_path if os.path.exists(pdapp_log_path) else None
 
     def info(self):
         '''Returns the number of completed Adobe payloads/packages,
@@ -120,13 +126,14 @@ class AdobeInstallProgressMonitor(object):
         payload/package.'''
         last_adobecode = ""
 
-        logfile = self.get_current_log()
-        if logfile:
+        if logfile := self.get_current_log():
             if logfile.endswith('PDApp.log'):
-                if self.operation == 'install':
-                    regex = r'Completed \'INSTALL\' task for Package '
-                else:
-                    regex = r'Completed \'UN-INSTALL\' task for Package '
+                regex = (
+                    r'Completed \'INSTALL\' task for Package '
+                    if self.operation == 'install'
+                    else r'Completed \'UN-INSTALL\' task for Package '
+                )
+
             elif self.kind in ['CS6', 'CS5']:
                 regex = r'END TIMER :: \[Payload Operation :\{'
             elif self.kind in ['CS3', 'CS4']:
@@ -134,18 +141,16 @@ class AdobeInstallProgressMonitor(object):
                     regex = r'Closed PCD cache session payload with ID'
                 else:
                     regex = r'Closed CAPS session for removal of payload'
+            elif self.operation == 'install':
+                regex = r'Completing installation for payload at '
             else:
-                if self.operation == 'install':
-                    regex = r'Completing installation for payload at '
-                else:
-                    regex = r'Physical payload uninstall result '
+                regex = r'Physical payload uninstall result '
 
             cmd = ['/usr/bin/grep', '-E', regex, logfile]
             proc = subprocess.Popen(cmd, bufsize=-1,
                                     stdout=subprocess.PIPE,
                                     stderr=subprocess.PIPE)
-            output = proc.communicate()[0].decode('UTF-8')
-            if output:
+            if output := proc.communicate()[0].decode('UTF-8'):
                 lines = output.splitlines()
                 completed_payloads = len(lines)
 
@@ -170,17 +175,16 @@ class AdobeInstallProgressMonitor(object):
                             match = regex.match(line)
                         try:
                             if logfile.endswith('PDApp.log'):
-                                last_adobecode = (
-                                    match.group(1) + '-' + match.group(2))
+                                last_adobecode = (match[1] + '-' + match[2])
                             else:
-                                last_adobecode = match.group(1)
+                                last_adobecode = match[1]
                             break
                         except (IndexError, AttributeError):
                             pass
 
-        total_completed_payloads = 0
-        for key in self.payload_count:
-            total_completed_payloads += self.payload_count[key]
+        total_completed_payloads = sum(
+            self.payload_count[key] for key in self.payload_count
+        )
 
         return (total_completed_payloads, last_adobecode)
 
@@ -197,17 +201,12 @@ def mount_adobe_dmg(dmgpath):
 def get_percent(current, maximum):
     '''Returns a value useful with MunkiStatus to use when
     displaying percent-done status'''
-    if maximum == 0:
-        percentdone = -1
-    elif current < 0:
-        percentdone = -1
-    elif current > maximum:
-        percentdone = -1
+    if maximum == 0 or current < 0 or current > maximum:
+        return -1
     elif current == maximum:
-        percentdone = 100
+        return 100
     else:
-        percentdone = int(float(current)/float(maximum)*100)
-    return percentdone
+        return int(float(current)/float(maximum)*100)
 
 
 SECONDSTOLIVE = {}
@@ -224,15 +223,14 @@ def kill_stupid_processes():
                         "switchboard.sh"]
 
     for procname in stupid_processes:
-        pid = utils.getPIDforProcessName(procname)
-        if pid:
-            if not pid in SECONDSTOLIVE:
+        if pid := utils.getPIDforProcessName(procname):
+            if pid not in SECONDSTOLIVE:
                 SECONDSTOLIVE[pid] = 30
             else:
                 SECONDSTOLIVE[pid] = SECONDSTOLIVE[pid] - 1
                 if SECONDSTOLIVE[pid] == 0:
                     # it's been running too long; kill it
-                    munkilog.log("Killing PID %s: %s" % (pid, procname))
+                    munkilog.log(f"Killing PID {pid}: {procname}")
                     try:
                         os.kill(int(pid), 9)
                     except OSError:
@@ -269,18 +267,19 @@ def run_adobe_install_tool(
         if payload_completed_count > old_payload_completed_count:
             old_payload_completed_count = payload_completed_count
             payloadname = adobe_code
-            if adobe_code and payloads:
-                # look up a payload name from the AdobeCode
-                matched_payloads = [payload for payload in payloads
-                                    if payload.get('AdobeCode') == adobe_code]
-                if matched_payloads:
+            if payloadname and payloads:
+                if matched_payloads := [
+                    payload
+                    for payload in payloads
+                    if payload.get('AdobeCode') == payloadname
+                ]:
                     payloadname = matched_payloads[0].get('display_name')
-            payloadinfo = " - %s" % payloadname
+            payloadinfo = f" - {payloadname}"
             if number_of_payloads:
                 display.display_status_minor(
-                    'Completed payload %s of %s%s' %
-                    (payload_completed_count, number_of_payloads,
-                     payloadinfo))
+                    f'Completed payload {payload_completed_count} of {number_of_payloads}{payloadinfo}'
+                )
+
             else:
                 display.display_status_minor(
                     'Completed payload %s%s',
@@ -293,11 +292,14 @@ def run_adobe_install_tool(
         # CSx installs at the loginwindow hang when Adobe AIR is installed.
         # So we check for this and kill the process. Ugly.
         # Hopefully we can disable this in the future.
-        if kill_adobeair:
-            if (not osutils.getconsoleuser() or
-                    osutils.getconsoleuser() == u"loginwindow"):
-                # we're at the loginwindow.
-                kill_stupid_processes()
+        if kill_adobeair and (
+            (
+                not osutils.getconsoleuser()
+                or osutils.getconsoleuser() == u"loginwindow"
+            )
+        ):
+            # we're at the loginwindow.
+            kill_stupid_processes()
 
     # run of tool completed
     retcode = proc.poll()
@@ -308,14 +310,13 @@ def run_adobe_install_tool(
         line = line.decode("UTF-8").rstrip("\n")
         if line.startswith("Error"):
             display.display_error(line)
-        if line.startswith("Exit Code:"):
-            if retcode == 0:
-                try:
-                    retcode = int(line[11:])
-                except (ValueError, TypeError):
-                    retcode = -1
+        if line.startswith("Exit Code:") and retcode == 0:
+            try:
+                retcode = int(line[11:])
+            except (ValueError, TypeError):
+                retcode = -1
 
-    if retcode != 0 and retcode != 8:
+    if retcode not in [0, 8]:
         display.display_error(
             'Adobe Setup error: %s: %s', retcode, adobe_setup_error(retcode))
     else:
@@ -330,11 +331,11 @@ def run_adobe_setup(dmgpath, uninstalling=False, payloads=None):
     '''Runs the Adobe setup tool in silent mode from
     an Adobe update DMG or an Adobe CS3 install DMG'''
     display.display_status_minor(
-        'Mounting disk image %s' % os.path.basename(dmgpath))
-    mountpoints = mount_adobe_dmg(dmgpath)
-    if mountpoints:
-        setup_path = adobeinfo.find_setup_app(mountpoints[0])
-        if setup_path:
+        f'Mounting disk image {os.path.basename(dmgpath)}'
+    )
+
+    if mountpoints := mount_adobe_dmg(dmgpath):
+        if setup_path := adobeinfo.find_setup_app(mountpoints[0]):
             # look for install.xml or uninstall.xml at root
             deploymentfile = None
             installxml = os.path.join(mountpoints[0], "install.xml")
@@ -363,7 +364,7 @@ def run_adobe_setup(dmgpath, uninstalling=False, payloads=None):
             display.display_status_minor('Running Adobe Setup')
             adobe_setup = [setup_path, '--mode=silent', '--skipProcessCheck=1']
             if deploymentfile:
-                adobe_setup.append('--deploymentFile=%s' % deploymentfile)
+                adobe_setup.append(f'--deploymentFile={deploymentfile}')
 
             retcode = run_adobe_install_tool(
                 adobe_setup, number_of_payloads, payloads=payloads,
@@ -378,7 +379,7 @@ def run_adobe_setup(dmgpath, uninstalling=False, payloads=None):
         dmgutils.unmountdmg(mountpoints[0])
         return retcode
     else:
-        display.display_error('No mountable filesystems on %s' % dmgpath)
+        display.display_error(f'No mountable filesystems on {dmgpath}')
         return -1
 
 
@@ -386,9 +387,8 @@ def writefile(stringdata, path):
     '''Writes string data to path.
     Returns the path on success, empty string on failure.'''
     try:
-        fileobject = open(path, mode='wb')
-        print(stringdata.encode('UTF-8'), file=fileobject)
-        fileobject.close()
+        with open(path, mode='wb') as fileobject:
+            print(stringdata.encode('UTF-8'), file=fileobject)
         return path
     except (OSError, IOError):
         display.display_error("Couldn't write %s" % stringdata)
@@ -410,13 +410,16 @@ def do_adobe_cs5_uninstall(adobe_install_info, payloads=None):
     setupapp = "/Library/Application Support/Adobe/OOBE/PDApp/DWA/Setup.app"
     setup = os.path.join(setupapp, "Contents/MacOS/Setup")
     if not os.path.exists(setup):
-        display.display_error("%s is not installed." % setupapp)
+        display.display_error(f"{setupapp} is not installed.")
         return -1
-    uninstall_cmd = [setup,
-                     '--mode=silent',
-                     '--action=uninstall',
-                     '--skipProcessCheck=1',
-                     '--deploymentFile=%s' % deployment_file]
+    uninstall_cmd = [
+        setup,
+        '--mode=silent',
+        '--action=uninstall',
+        '--skipProcessCheck=1',
+        f'--deploymentFile={deployment_file}',
+    ]
+
     display.display_status_minor('Running Adobe Uninstall')
     return run_adobe_install_tool(
         uninstall_cmd, payloadcount, payloads=payloads, kind='CS5',
@@ -427,10 +430,12 @@ def run_adobe_cpp_pkg_script(dmgpath, payloads=None, operation='install'):
     '''Installs or removes an Adobe product packaged via
     Creative Cloud Packager'''
     display.display_status_minor(
-        'Mounting disk image %s' % os.path.basename(dmgpath))
+        f'Mounting disk image {os.path.basename(dmgpath)}'
+    )
+
     mountpoints = mount_adobe_dmg(dmgpath)
     if not mountpoints:
-        display.display_error("No mountable filesystems on %s" % dmgpath)
+        display.display_error(f"No mountable filesystems on {dmgpath}")
         return -1
 
     deploymentmanager = adobeinfo.find_adobe_deployment_manager(mountpoints[0])
@@ -457,11 +462,9 @@ def run_adobe_cpp_pkg_script(dmgpath, payloads=None, operation='install'):
     preinstall_script = os.path.join(basepath, "preinstall")
     if not os.path.exists(preinstall_script):
         if operation == 'install':
-            display.display_error(
-                "No Adobe install script found on %s" % dmgpath)
+            display.display_error(f"No Adobe install script found on {dmgpath}")
         else:
-            display.display_error(
-                "No Adobe uninstall script found on %s" % dmgpath)
+            display.display_error(f"No Adobe uninstall script found on {dmgpath}")
         dmgutils.unmountdmg(mountpoints[0])
         return -1
     number_of_payloads = adobeinfo.count_payloads(basepath)
@@ -519,14 +522,17 @@ def run_adobe_cs5_aamee_install(dmgpath, payloads=None):
     '''Installs a CS5 product using an AAMEE-generated package on a
     disk image.'''
     display.display_status_minor(
-        'Mounting disk image %s' % os.path.basename(dmgpath))
+        f'Mounting disk image {os.path.basename(dmgpath)}'
+    )
+
     mountpoints = mount_adobe_dmg(dmgpath)
     if not mountpoints:
-        display.display_error("No mountable filesystems on %s" % dmgpath)
+        display.display_error(f"No mountable filesystems on {dmgpath}")
         return -1
 
-    deploymentmanager = adobeinfo.find_adobe_deployment_manager(mountpoints[0])
-    if deploymentmanager:
+    if deploymentmanager := adobeinfo.find_adobe_deployment_manager(
+        mountpoints[0]
+    ):
         # big hack to convince the Adobe tools to install off a mounted
         # disk image.
         #
@@ -572,9 +578,16 @@ def run_adobe_cs5_aamee_install(dmgpath, payloads=None):
         else:
             cmd = []
 
-        cmd.extend([deploymentmanager, '--optXMLPath=%s' % option_xml_file,
-                    '--setupBasePath=%s' % basepath, '--installDirPath=/',
-                    '--mode=install'])
+        cmd.extend(
+            [
+                deploymentmanager,
+                f'--optXMLPath={option_xml_file}',
+                f'--setupBasePath={basepath}',
+                '--installDirPath=/',
+                '--mode=install',
+            ]
+        )
+
 
         display.display_status_minor('Starting Adobe installer...')
         retcode = run_adobe_install_tool(
@@ -597,9 +610,10 @@ def run_adobe_cs5_patch_installer(dmgpath, copylocal=False, payloads=None):
     Optionally can copy the DMG contents to the local disk
     to work around issues with the patcher.'''
     display.display_status_minor(
-        'Mounting disk image %s' % os.path.basename(dmgpath))
-    mountpoints = mount_adobe_dmg(dmgpath)
-    if mountpoints:
+        f'Mounting disk image {os.path.basename(dmgpath)}'
+    )
+
+    if mountpoints := mount_adobe_dmg(dmgpath):
         if copylocal:
             # copy the update to the local disk before installing
             updatedir = tempfile.mkdtemp(prefix='munki-', dir='/tmp')
@@ -608,8 +622,7 @@ def run_adobe_cs5_patch_installer(dmgpath, copylocal=False, payloads=None):
             # unmount diskimage
             dmgutils.unmountdmg(mountpoints[0])
             if retcode:
-                display.display_error(
-                    'Error copying items from %s' % dmgpath)
+                display.display_error(f'Error copying items from {dmgpath}')
                 return -1
             # remove the dmg file to free up space, since we don't need it
             # any longer
@@ -617,8 +630,7 @@ def run_adobe_cs5_patch_installer(dmgpath, copylocal=False, payloads=None):
         else:
             updatedir = mountpoints[0]
 
-        patchinstaller = adobeinfo.find_adobepatchinstaller_app(updatedir)
-        if patchinstaller:
+        if patchinstaller := adobeinfo.find_adobepatchinstaller_app(updatedir):
             # try to find and count the number of payloads
             # so we can give a rough progress indicator
             number_of_payloads = adobeinfo.count_payloads(updatedir)
@@ -641,7 +653,7 @@ def run_adobe_cs5_patch_installer(dmgpath, copylocal=False, payloads=None):
             dmgutils.unmountdmg(mountpoints[0])
         return retcode
     else:
-        display.display_error('No mountable filesystems on %s' % dmgpath)
+        display.display_error(f'No mountable filesystems on {dmgpath}')
         return -1
 
 
@@ -652,9 +664,10 @@ def run_adobe_uber_tool(dmgpath, pkgname='', uninstalling=False, payloads=None):
     containing the AdobeUber tools and their XML files.'''
 
     display.display_status_minor(
-        'Mounting disk image %s' % os.path.basename(dmgpath))
-    mountpoints = mount_adobe_dmg(dmgpath)
-    if mountpoints:
+        f'Mounting disk image {os.path.basename(dmgpath)}'
+    )
+
+    if mountpoints := mount_adobe_dmg(dmgpath):
         installroot = mountpoints[0]
         if uninstalling:
             ubertool = os.path.join(installroot, pkgname,
@@ -671,9 +684,9 @@ def run_adobe_uber_tool(dmgpath, pkgname='', uninstalling=False, payloads=None):
             if uninstalling:
                 action = "Uninstalling"
                 operation = "uninstall"
-            display.display_status_major('%s %s' % (action, packagename))
+            display.display_status_major(f'{action} {packagename}')
             if display.munkistatusoutput:
-                munkistatus.detail('Starting %s' % os.path.basename(ubertool))
+                munkistatus.detail(f'Starting {os.path.basename(ubertool)}')
 
             # try to find and count the number of payloads
             # so we can give a rough progress indicator
@@ -684,13 +697,13 @@ def run_adobe_uber_tool(dmgpath, pkgname='', uninstalling=False, payloads=None):
                 payloads=payloads, kind='CS4', operation=operation)
 
         else:
-            display.display_error("No %s found" % ubertool)
+            display.display_error(f"No {ubertool} found")
             retcode = -1
 
         dmgutils.unmountdmg(installroot)
         return retcode
     else:
-        display.display_error("No mountable filesystems on %s" % dmgpath)
+        display.display_error(f"No mountable filesystems on {dmgpath}")
         return -1
 
 
@@ -705,13 +718,14 @@ def update_acrobatpro(dmgpath):
 
     #first mount the dmg
     display.display_status_minor(
-        'Mounting disk image %s' % os.path.basename(dmgpath))
-    mountpoints = mount_adobe_dmg(dmgpath)
-    if mountpoints:
+        f'Mounting disk image {os.path.basename(dmgpath)}'
+    )
+
+    if mountpoints := mount_adobe_dmg(dmgpath):
         installroot = mountpoints[0]
         acrobatpatchapp_path = adobeinfo.find_acrobat_patch_app(installroot)
     else:
-        display.display_error("No mountable filesystems on %s" % dmgpath)
+        display.display_error(f"No mountable filesystems on {dmgpath}")
         return -1
 
     if not acrobatpatchapp_path:
@@ -729,10 +743,8 @@ def update_acrobatpro(dmgpath):
     app_list = []
     app_list_file = os.path.join(resources_dir, 'app_list.txt')
     if os.path.exists(app_list_file):
-        fileobj = open(app_list_file, mode='r')
-        if fileobj:
-            for line in fileobj.readlines():
-                app_list.append(line)
+        if fileobj := open(app_list_file, mode='r'):
+            app_list.extend(iter(fileobj))
             fileobj.close()
 
     if not app_list:
@@ -747,29 +759,30 @@ def update_acrobatpro(dmgpath):
             munkistatus.percent(get_percent(payload_num + 1, len(app_list) + 1))
 
         (appname, status) = line.split("\t")
-        display.display_status_minor('Searching for %s' % appname)
+        display.display_status_minor(f'Searching for {appname}')
         # first look in the obvious place
         pathname = os.path.join("/Applications/Adobe Acrobat 9 Pro", appname)
         if os.path.exists(pathname):
-            item = {}
-            item['path'] = pathname
+            item = {'path': pathname}
             candidates = [item]
         else:
             # use system_profiler to search for the app
-            candidates = [item for item in info.app_data()
-                          if item['path'].endswith('/' + appname)]
+            candidates = [
+                item
+                for item in info.app_data()
+                if item['path'].endswith(f'/{appname}')
+            ]
+
 
         # hope there's only one!
         if not candidates:
-            # there are no candidates!
             if status == "optional":
                 continue
-            else:
-                display.display_error(
-                    "Cannot patch %s because it was not found on the startup "
-                    "disk." % appname)
-                dmgutils.unmountdmg(installroot)
-                return -1
+            display.display_error(
+                "Cannot patch %s because it was not found on the startup "
+                "disk." % appname)
+            dmgutils.unmountdmg(installroot)
+            return -1
 
         if len(candidates) > 1:
             display.display_error(
@@ -778,7 +791,7 @@ def update_acrobatpro(dmgpath):
             dmgutils.unmountdmg(installroot)
             return -1
 
-        display.display_status_minor('Updating %s' % appname)
+        display.display_status_minor(f'Updating {appname}')
         apppath = os.path.dirname(candidates[0]["path"])
         cmd = [apply_operation, apppath, appname, resources_dir,
                calling_script_path, str(payload_num)]
@@ -862,8 +875,9 @@ def do_adobe_removal(item):
                                 item["uninstaller_item"])
         if not os.path.exists(itempath):
             display.display_error(
-                "%s package for %s was missing from the cache."
-                % (uninstallmethod, item['name']))
+                f"{uninstallmethod} package for {item['name']} was missing from the cache."
+            )
+
             return -1
 
     if uninstallmethod == "AdobeSetup":

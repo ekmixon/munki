@@ -19,6 +19,7 @@ fetch.py
 Created by Greg Neagle on 2011-09-29.
 
 """
+
 from __future__ import absolute_import, print_function
 
 # standard libs
@@ -78,8 +79,9 @@ darwin_version = os.uname()[2]
 #cfnetwork_version = FoundationPlist.readPlist(
 #  "/System/Library/Frameworks/CFNetwork.framework/Resources/Info.plist")[
 #       'CFBundleShortVersionString']
-DEFAULT_USER_AGENT = "managedsoftwareupdate/%s Darwin/%s" % (
-    munki_version, darwin_version)
+DEFAULT_USER_AGENT = (
+    f"managedsoftwareupdate/{munki_version} Darwin/{darwin_version}"
+)
 
 
 def import_middleware():
@@ -97,23 +99,26 @@ def import_middleware():
                 _tmp = imp.load_source(name, filepath)
                 if hasattr(_tmp, required_function_name):
                     if callable(getattr(_tmp, required_function_name)):
-                        display.display_debug1(
-                            'Loading middleware module %s' % filename)
+                        display.display_debug1(f'Loading middleware module {filename}')
                         globals()['middleware'] = _tmp
                         return
                     else:
                         display.display_warning(
-                            '%s attribute in %s is not callable.'
-                            % (required_function_name, filepath))
-                        display.display_warning('Ignoring %s' % filepath)
+                            f'{required_function_name} attribute in {filepath} is not callable.'
+                        )
+
+                        display.display_warning(f'Ignoring {filepath}')
                 else:
                     display.display_warning(
-                        '%s does not have a %s function'
-                        % (filepath, required_function_name))
-                    display.display_warning('Ignoring %s' % filepath)
+                        f'{filepath} does not have a {required_function_name} function'
+                    )
+
+                    display.display_warning(f'Ignoring {filepath}')
             except BaseException:
                 display.display_warning(
-                    'Ignoring %s because of error importing module.' % filepath)
+                    f'Ignoring {filepath} because of error importing module.'
+                )
+
     return
 
 
@@ -184,9 +189,7 @@ def header_dict_from_list(array):
     """Given a list of strings in http header format, return a dict.
     A User-Agent header is added if none is present in the list.
     If array is None, returns a dict with only the User-Agent header."""
-    header_dict = {}
-    header_dict["User-Agent"] = DEFAULT_USER_AGENT
-
+    header_dict = {"User-Agent": DEFAULT_USER_AGENT}
     if array is None:
         return header_dict
     for item in array:
@@ -211,7 +214,7 @@ def get_url(url, destinationpath,
     If you set resume to True, Gurl will attempt to resume an
     interrupted download."""
 
-    tempdownloadpath = destinationpath + '.download'
+    tempdownloadpath = f'{destinationpath}.download'
     if os.path.exists(tempdownloadpath) and not resume:
         os.remove(tempdownloadpath)
 
@@ -237,7 +240,7 @@ def get_url(url, destinationpath,
                'cache_data': cache_data,
                'logging_function': display.display_debug2,
                'pkginfo': pkginfo}
-    display.display_debug2('Options: %s' % options)
+    display.display_debug2(f'Options: {options}')
 
     # Allow middleware to modify options
     if middleware:
@@ -245,7 +248,7 @@ def get_url(url, destinationpath,
         # middleware module must have process_request_options function
         # and must return usable options
         options = middleware.process_request_options(options)
-        display.display_debug2('Options: %s' % options)
+        display.display_debug2(f'Options: {options}')
 
     connection = Gurl.alloc().initWithOptions_(options)
     stored_percent_complete = -1
@@ -365,10 +368,12 @@ def getResourceIfChangedAtomically(url,
     # we need, do nothing, return unchanged.
     if resume and expected_hash and os.path.isfile(destinationpath):
         xattr_hash = getxattr(destinationpath, XATTR_SHA)
-        if not xattr_hash:
-            xattr_hash = writeCachedChecksum(destinationpath)
-        else:
-            xattr_hash = xattr_hash.decode('UTF-8')
+        xattr_hash = (
+            xattr_hash.decode('UTF-8')
+            if xattr_hash
+            else writeCachedChecksum(destinationpath)
+        )
+
         if xattr_hash == expected_hash:
             #File is already current, no change.
             munkilog.log("        Cached item is current.")
@@ -382,7 +387,7 @@ def getResourceIfChangedAtomically(url,
         munkilog.log('Cached item does not match hash in catalog, '
                      'will check if changed and redownload: %s'
                      % destinationpath)
-        # continue with normal if-modified-since/etag update methods.
+            # continue with normal if-modified-since/etag update methods.
 
     if follow_redirects is not True:
         # If we haven't explicitly said to follow redirect,
@@ -399,8 +404,7 @@ def getResourceIfChangedAtomically(url,
     elif url_parse.scheme == 'file':
         changed = getFileIfChangedAtomically(url_parse.path, destinationpath)
     else:
-        raise Error(
-            'Unsupported scheme for %s: %s' % (url, url_parse.scheme))
+        raise Error(f'Unsupported scheme for {url}: {url_parse.scheme}')
 
     if changed and verify:
         (verify_ok, fhash) = verifySoftwarePackageIntegrity(destinationpath,
@@ -458,7 +462,7 @@ def getFileIfChangedAtomically(path, destinationpath):
     try:
         st_src = os.stat(path)
     except OSError:
-        raise FileCopyError('Source does not exist: %s' % path)
+        raise FileCopyError(f'Source does not exist: {path}')
 
     try:
         st_dst = os.stat(destinationpath)
@@ -472,30 +476,27 @@ def getFileIfChangedAtomically(path, destinationpath):
         return False
 
     # write to a temporary destination
-    tmp_destinationpath = '%s.download' % destinationpath
+    tmp_destinationpath = f'{destinationpath}.download'
 
     # remove the temporary destination if it exists
     try:
         if st_dst:
             os.unlink(tmp_destinationpath)
     except OSError as err:
-        if err.args[0] == errno.ENOENT:
-            pass  # OK
-        else:
-            raise FileCopyError('Removing %s: %s' % (
-                tmp_destinationpath, str(err)))
+        if err.args[0] != errno.ENOENT:
+            raise FileCopyError(f'Removing {tmp_destinationpath}: {str(err)}')
 
     # copy from source to temporary destination
     try:
         shutil.copy2(path, tmp_destinationpath)
     except IOError as err:
-        raise FileCopyError('Copy IOError: %s' % str(err))
+        raise FileCopyError(f'Copy IOError: {str(err)}')
 
     # rename temp destination to final destination
     try:
         os.rename(tmp_destinationpath, destinationpath)
     except OSError as err:
-        raise FileCopyError('Renaming %s: %s' % (destinationpath, str(err)))
+        raise FileCopyError(f'Renaming {destinationpath}: {str(err)}')
 
     return True
 
@@ -516,12 +517,9 @@ def getHTTPfileIfChangedAtomically(url, destinationpath,
     etag = None
     getonlyifnewer = False
     if os.path.exists(destinationpath):
-        getonlyifnewer = True
         # see if we have an etag attribute
         etag = getxattr(destinationpath, XATTR_ETAG)
-        if etag:
-            getonlyifnewer = False
-
+        getonlyifnewer = not etag
     try:
         header = get_url(url,
                          destinationpath,
@@ -538,11 +536,11 @@ def getHTTPfileIfChangedAtomically(url, destinationpath,
         raise
 
     except HTTPError as err:
-        err = 'HTTP result %s: %s' % (err.args[0], err.args[1])
+        err = f'HTTP result {err.args[0]}: {err.args[1]}'
         raise GurlDownloadError(err)
 
     except GurlError as err:
-        err = 'Error %s: %s' % (err.args[0], err.args[1])
+        err = f'Error {err.args[0]}: {err.args[1]}'
         raise GurlDownloadError(err)
 
     err = None
@@ -603,17 +601,14 @@ def verifySoftwarePackageIntegrity(file_path, item_hash, always_hash=False):
         True if the package integrity could be validated. Otherwise, False.
     """
     mode = prefs.pref('PackageVerificationMode')
-    chash = None
     item_name = getURLitemBasename(file_path)
-    if always_hash:
-        chash = munkihash.getsha256hash(file_path)
-
+    chash = munkihash.getsha256hash(file_path) if always_hash else None
     if not mode:
         return (True, chash)
     elif mode.lower() == 'none':
         display.display_warning('Package integrity checking is disabled.')
         return (True, chash)
-    elif mode.lower() == 'hash' or mode.lower() == 'hash_strict':
+    elif mode.lower() in ['hash', 'hash_strict']:
         if item_hash:
             display.display_status_minor('Verifying package integrity...')
             if not chash:
@@ -621,15 +616,14 @@ def verifySoftwarePackageIntegrity(file_path, item_hash, always_hash=False):
             if item_hash == chash:
                 return (True, chash)
             # item_hash != chash
-            display.display_error(
-                'Hash value integrity check for %s failed.' %
-                item_name)
+            display.display_error(f'Hash value integrity check for {item_name} failed.')
             return (False, chash)
         else:
             if mode.lower() == 'hash_strict':
                 display.display_error(
-                    'Reference hash value for %s is missing in catalog.'
-                    % item_name)
+                    f'Reference hash value for {item_name} is missing in catalog.'
+                )
+
                 return (False, chash)
             # mode.lower() != 'hash_strict'
             display.display_warning(
@@ -656,9 +650,8 @@ def getDataFromURL(url):
             display.display_warning('Error in getDataFromURL: %s', err)
     dummy_result = munki_resource(url, urldata)
     try:
-        fdesc = open(urldata)
-        data = fdesc.read()
-        fdesc.close()
+        with open(urldata) as fdesc:
+            data = fdesc.read()
         os.unlink(urldata)
         return data
     except (IOError, OSError) as err:
@@ -682,7 +675,7 @@ def check_server(url):
             return (-1, 'Non-local hostnames not supported for file:// URLs')
         if os.path.exists(url_parts.path):
             return (0, 'OK')
-        return (-1, 'Path %s does not exist' % url_parts.path)
+        return -1, f'Path {url_parts.path} does not exist'
     else:
         return (-1, 'Unsupported URL scheme')
 

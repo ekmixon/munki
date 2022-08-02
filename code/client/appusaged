@@ -78,15 +78,15 @@ class AppUsageHandler(object):
         '''Make sure copy request has everything we need'''
         self.log.debug('Verifying request')
         for key in ['event']:
-            if not key in self.request:
-                raise AppUsageHandlerError('No %s in request' % key)
+            if key not in self.request:
+                raise AppUsageHandlerError(f'No {key} in request')
         if self.request['event'] in ['install', 'remove']:
             expected_keys = ['name', 'version']
         else:
             expected_keys = ['app_dict']
         for key in expected_keys:
-            if not key in self.request:
-                raise AppUsageHandlerError('No %s in request' % key)
+            if key not in self.request:
+                raise AppUsageHandlerError(f'No {key} in request')
 
     def handle(self):
         '''Handle our request'''
@@ -111,7 +111,7 @@ class RunHandler(SocketServer.StreamRequestHandler):
         '''Verify the basic syntax of request plist.'''
         # pylint: disable=no-self-use
         # Keep a list of error messages.
-        errors = list()
+        errors = []
 
         # Root should be a dictionary.
         if not isinstance(plist, dict):
@@ -144,10 +144,6 @@ class RunHandler(SocketServer.StreamRequestHandler):
         NGROUPS = 16
         # pylint: enable=invalid-name
         cr_version = 0
-        cr_uid = 1
-        cr_ngroups = 2
-        cr_groups = 3
-
         xucred_fmt = b'IIh%dI' % NGROUPS
         res = struct.unpack(
             xucred_fmt,
@@ -156,6 +152,10 @@ class RunHandler(SocketServer.StreamRequestHandler):
 
         if res[cr_version] != XUCRED_VERSION:
             raise OSError('Incompatible struct xucred version')
+
+        cr_uid = 1
+        cr_ngroups = 2
+        cr_groups = 3
 
         return res[cr_uid], res[cr_groups:cr_groups + res[cr_ngroups]]
 
@@ -171,7 +171,7 @@ class RunHandler(SocketServer.StreamRequestHandler):
             try:
                 uid, gids = self.getpeerid()
             except OSError as err:
-                self.log.error(u'Peerid failure: %s' % unicode_or_str(err))
+                self.log.error(f'Peerid failure: {unicode_or_str(err)}')
                 self.request.send(
                     (u'ERROR:Internal peerid error\n').encode('UTF-8'))
                 return
@@ -212,14 +212,13 @@ class RunHandler(SocketServer.StreamRequestHandler):
                 self.request.send(
                     (u'ERROR:%s\n' % unicode_or_str(err)).encode('UTF-8'))
             except BaseException as err:
-                self.log.error(u'Run failed: %s' % unicode_or_str(err))
+                self.log.error(f'Run failed: {unicode_or_str(err)}')
                 self.request.send(
                     (u'ERROR:%s\n' % unicode_or_str(err)).encode('UTF-8'))
 
         except BaseException as err:
-            self.log.error(u'Caught exception: %s' % repr(err))
-            self.request.send(
-                (u'ERROR:Caught exception: %s' % repr(err)).encode('UTF-8'))
+            self.log.error(f'Caught exception: {repr(err)}')
+            self.request.send(f'ERROR:Caught exception: {repr(err)}'.encode('UTF-8'))
 
 class AppUsageDaemonError(Exception):
     '''Exception to raise for AppUsageDaemon errors'''
@@ -260,7 +259,9 @@ class AppUsageDaemon(SocketServer.UnixStreamServer):
             log_console.setLevel(logging_level)
             # store the log in the same directory as ManagedSoftwareUpdate.log
             logfilepath = os.path.join(
-                os.path.dirname(prefs.pref('LogFile')), APPNAME + '.log')
+                os.path.dirname(prefs.pref('LogFile')), f'{APPNAME}.log'
+            )
+
             log_file = logging.handlers.RotatingFileHandler(
                 logfilepath, 'a', 100000, 9, 'utf-8')
             log_file.setLevel(logging_level)
@@ -287,7 +288,7 @@ def main():
     '''Start our daemon, connect to socket and process events'''
     # Make sure we're launched as root
     if os.geteuid() != 0:
-        print_error_and_exit('%s must be run as root.' % APPNAME)
+        print_error_and_exit(f'{APPNAME} must be run as root.')
 
     # Make sure that the executable and all containing directories are owned
     # by root:wheel or root:admin, and not writeable by other users.
@@ -300,11 +301,10 @@ def main():
     while True:
         info = os.stat(exepath)
         if info.st_uid != root_uid:
-            print('%s must be owned by root.' % exepath, file=sys.stderr)
+            print(f'{exepath} must be owned by root.', file=sys.stderr)
             path_ok = False
         if info.st_gid not in (wheel_gid, admin_gid):
-            print('%s must have group wheel or admin.' % exepath,
-                  file=sys.stderr)
+            print(f'{exepath} must have group wheel or admin.', file=sys.stderr)
             path_ok = False
         if info.st_mode & stat.S_IWOTH:
             print('%s mustn\'t be world writeable.' % exepath, file=sys.stderr)
@@ -331,7 +331,7 @@ def main():
     try:
         daemon.setup_logging()
     except AppUsageDaemonError as err:
-        print_error_and_exit('%s' % err)
+        print_error_and_exit(f'{err}')
 
     daemon.log.debug('%s v%s starting', APPNAME, VERSION)
 

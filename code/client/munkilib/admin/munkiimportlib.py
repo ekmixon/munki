@@ -54,29 +54,30 @@ def copy_item_to_repo(repo, itempath, vers, subdirectory=''):
     destination_path_name = os.path.join(destination_path, item_name)
 
     name, ext = os.path.splitext(item_name)
-    if vers:
-        if not name.endswith(vers):
+    if vers and not name.endswith(vers):
             # add the version number to the end of the filename
-            item_name = '%s-%s%s' % (name, vers, ext)
-            destination_path_name = os.path.join(destination_path, item_name)
+        item_name = f'{name}-{vers}{ext}'
+        destination_path_name = os.path.join(destination_path, item_name)
 
     index = 0
     try:
         pkgs_list = list_items_of_kind(repo, 'pkgs')
     except munkirepo.RepoError as err:
-        raise RepoCopyError(u'Unable to get list of current pkgs: %s' % err)
+        raise RepoCopyError(f'Unable to get list of current pkgs: {err}')
     while destination_path_name in pkgs_list:
         #print 'File %s already exists...' % destination_path_name
         # try appending numbers until we have a unique name
         index += 1
-        item_name = '%s__%s%s' % (name, index, ext)
+        item_name = f'{name}__{index}{ext}'
         destination_path_name = os.path.join(destination_path, item_name)
 
     try:
         repo.put_from_local_file(destination_path_name, itempath)
     except munkirepo.RepoError as err:
-        raise RepoCopyError(u'Unable to copy %s to %s: %s'
-                            % (itempath, destination_path_name, err))
+        raise RepoCopyError(
+            f'Unable to copy {itempath} to {destination_path_name}: {err}'
+        )
+
     else:
         return destination_path_name
 
@@ -88,19 +89,17 @@ def copy_pkginfo_to_repo(repo, pkginfo, subdirectory=''):
     destination_path = os.path.join('pkgsinfo', subdirectory)
     pkginfo_ext = pref('pkginfo_extension') or ''
     if pkginfo_ext and not pkginfo_ext.startswith('.'):
-        pkginfo_ext = '.' + pkginfo_ext
-    pkginfo_name = '%s-%s%s' % (pkginfo['name'], pkginfo['version'],
-                                pkginfo_ext)
+        pkginfo_ext = f'.{pkginfo_ext}'
+    pkginfo_name = f"{pkginfo['name']}-{pkginfo['version']}{pkginfo_ext}"
     pkginfo_path = os.path.join(destination_path, pkginfo_name)
     index = 0
     try:
         pkgsinfo_list = list_items_of_kind(repo, 'pkgsinfo')
     except munkirepo.RepoError as err:
-        raise RepoCopyError(u'Unable to get list of current pkgsinfo: %s' % err)
+        raise RepoCopyError(f'Unable to get list of current pkgsinfo: {err}')
     while pkginfo_path in pkgsinfo_list:
         index += 1
-        pkginfo_name = '%s-%s__%s%s' % (pkginfo['name'], pkginfo['version'],
-                                        index, pkginfo_ext)
+        pkginfo_name = f"{pkginfo['name']}-{pkginfo['version']}__{index}{pkginfo_ext}"
         pkginfo_path = os.path.join(destination_path, pkginfo_name)
 
     try:
@@ -111,8 +110,7 @@ def copy_pkginfo_to_repo(repo, pkginfo, subdirectory=''):
         repo.put(pkginfo_path, pkginfo_str)
         return pkginfo_path
     except munkirepo.RepoError as err:
-        raise RepoCopyError(u'Unable to save pkginfo to %s: %s'
-                            % (pkginfo_path, err))
+        raise RepoCopyError(f'Unable to save pkginfo to {pkginfo_path}: {err}')
 
 
 class CatalogDBException(Exception):
@@ -156,11 +154,11 @@ def make_catalog_db(repo):
         vers = item.get('version', 'NO VERSION')
 
         if name == 'NO NAME' or vers == 'NO VERSION':
-            print('WARNING: Bad pkginfo: %s' % item, file=sys.stderr)
+            print(f'WARNING: Bad pkginfo: {item}', file=sys.stderr)
 
         # add to hash table
         if 'installer_item_hash' in item:
-            if not item['installer_item_hash'] in hash_table:
+            if item['installer_item_hash'] not in hash_table:
                 hash_table[item['installer_item_hash']] = []
             hash_table[item['installer_item_hash']].append(itemindex)
 
@@ -172,9 +170,9 @@ def make_catalog_db(repo):
             if '-' in name:
                 (name, vers) = pkgutils.nameAndVersion(name)
             installer_item_name = name + ext
-            if not installer_item_name in installer_item_table:
+            if installer_item_name not in installer_item_table:
                 installer_item_table[installer_item_name] = {}
-            if not vers in installer_item_table[installer_item_name]:
+            if vers not in installer_item_table[installer_item_name]:
                 installer_item_table[installer_item_name][vers] = []
             installer_item_table[installer_item_name][vers].append(itemindex)
 
@@ -184,46 +182,42 @@ def make_catalog_db(repo):
                 if 'packageid' in receipt and 'version' in receipt:
                     pkgid = receipt['packageid']
                     pkgvers = receipt['version']
-                    if not pkgid in pkgid_table:
+                    if pkgid not in pkgid_table:
                         pkgid_table[pkgid] = {}
-                    if not pkgvers in pkgid_table[pkgid]:
+                    if pkgvers not in pkgid_table[pkgid]:
                         pkgid_table[pkgid][pkgvers] = []
                     pkgid_table[pkgid][pkgvers].append(itemindex)
             except TypeError:
-                print('Bad receipt data for %s-%s: %s' % (name, vers, receipt),
-                      file=sys.stderr)
+                print(f'Bad receipt data for {name}-{vers}: {receipt}', file=sys.stderr)
 
         # add to table of installed applications
         for install in item.get('installs', []):
             try:
-                if install.get('type') == 'application':
-                    if 'path' in install:
-                        if not install['path'] in app_table:
-                            app_table[install['path']] = {}
-                        if not vers in app_table[install['path']]:
-                            app_table[install['path']][vers] = []
-                        app_table[install['path']][vers].append(itemindex)
+                if install.get('type') == 'application' and 'path' in install:
+                    if install['path'] not in app_table:
+                        app_table[install['path']] = {}
+                    if vers not in app_table[install['path']]:
+                        app_table[install['path']][vers] = []
+                    app_table[install['path']][vers].append(itemindex)
             except TypeError:
-                print('Bad install data for %s-%s: %s' % (name, vers, install),
-                      file=sys.stderr)
+                print(f'Bad install data for {name}-{vers}: {install}', file=sys.stderr)
 
         # add to table of PayloadIdentifiers
         if 'PayloadIdentifier' in item:
-            if not item['PayloadIdentifier'] in profile_table:
+            if item['PayloadIdentifier'] not in profile_table:
                 profile_table[item['PayloadIdentifier']] = {}
-            if not vers in profile_table[item['PayloadIdentifier']]:
+            if vers not in profile_table[item['PayloadIdentifier']]:
                 profile_table[item['PayloadIdentifier']][vers] = []
             profile_table[item['PayloadIdentifier']][vers].append(itemindex)
 
-    pkgdb = {}
-    pkgdb['hashes'] = hash_table
-    pkgdb['receipts'] = pkgid_table
-    pkgdb['applications'] = app_table
-    pkgdb['installer_items'] = installer_item_table
-    pkgdb['profiles'] = profile_table
-    pkgdb['items'] = catalogitems
-
-    return pkgdb
+    return {
+        'hashes': hash_table,
+        'receipts': pkgid_table,
+        'applications': app_table,
+        'installer_items': installer_item_table,
+        'profiles': profile_table,
+        'items': catalogitems,
+    }
 
 
 def find_matching_pkginfo(repo, pkginfo):
@@ -233,34 +227,29 @@ def find_matching_pkginfo(repo, pkginfo):
     try:
         catdb = make_catalog_db(repo)
     except CatalogReadException as err:
-        # could not retrieve catalogs/all
-        # do we have any existing pkgsinfo items?
-        pkgsinfo_items = repo.itemlist('pkgsinfo')
-        if pkgsinfo_items:
+        if pkgsinfo_items := repo.itemlist('pkgsinfo'):
             # there _are_ existing pkgsinfo items.
             # warn about the problem since we can't seem to read catalogs/all
-            print(u'Could not get a list of existing items from the repo: %s'
-                  % err)
+            print(f'Could not get a list of existing items from the repo: {err}')
         return {}
     except CatalogDBException as err:
         # other error while processing catalogs/all
-        print (u'Could not get a list of existing items from the repo: %s'
-               % err)
+        print(f'Could not get a list of existing items from the repo: {err}')
         return {}
 
     if 'installer_item_hash' in pkginfo:
-        matchingindexes = catdb['hashes'].get(
-            pkginfo['installer_item_hash'])
-        if matchingindexes:
+        if matchingindexes := catdb['hashes'].get(
+            pkginfo['installer_item_hash']
+        ):
             return catdb['items'][matchingindexes[0]]
 
     if 'receipts' in pkginfo:
-        pkgids = [item['packageid']
-                  for item in pkginfo['receipts']
-                  if 'packageid' in item]
-        if pkgids:
-            possiblematches = catdb['receipts'].get(pkgids[0])
-            if possiblematches:
+        if pkgids := [
+            item['packageid']
+            for item in pkginfo['receipts']
+            if 'packageid' in item
+        ]:
+            if possiblematches := catdb['receipts'].get(pkgids[0]):
                 versionlist = list(possiblematches.keys())
                 versionlist.sort(key=pkgutils.MunkiLooseVersion, reverse=True)
                 # go through possible matches, newest version first
@@ -275,13 +264,13 @@ def find_matching_pkginfo(repo, pkginfo):
                             return testpkginfo
 
     if 'installs' in pkginfo:
-        applist = [item for item in pkginfo['installs']
-                   if item['type'] == 'application'
-                   and 'path' in item]
-        if applist:
+        if applist := [
+            item
+            for item in pkginfo['installs']
+            if item['type'] == 'application' and 'path' in item
+        ]:
             app = applist[0]['path']
-            possiblematches = catdb['applications'].get(app)
-            if possiblematches:
+            if possiblematches := catdb['applications'].get(app):
                 versionlist = list(possiblematches.keys())
                 versionlist.sort(key=pkgutils.MunkiLooseVersion, reverse=True)
                 indexes = catdb['applications'][app][versionlist[0]]
@@ -289,8 +278,7 @@ def find_matching_pkginfo(repo, pkginfo):
 
     if 'PayloadIdentifier' in pkginfo:
         identifier = pkginfo['PayloadIdentifier']
-        possiblematches = catdb['profiles'].get(identifier)
-        if possiblematches:
+        if possiblematches := catdb['profiles'].get(identifier):
             versionlist = list(possiblematches.keys())
             versionlist.sort(key=pkgutils.MunkiLooseVersion, reverse=True)
             indexes = catdb['profiles'][identifier][versionlist[0]]
@@ -300,8 +288,7 @@ def find_matching_pkginfo(repo, pkginfo):
     # let's try to match based on installer_item_name
     installer_item_name = os.path.basename(
         pkginfo.get('installer_item_location', ''))
-    possiblematches = catdb['installer_items'].get(installer_item_name)
-    if possiblematches:
+    if possiblematches := catdb['installer_items'].get(installer_item_name):
         versionlist = list(possiblematches.keys())
         versionlist.sort(key=pkgutils.MunkiLooseVersion, reverse=True)
         indexes = catdb['installer_items'][installer_item_name][versionlist[0]]
@@ -325,10 +312,8 @@ def icon_exists_in_repo(repo, pkginfo):
     try:
         icon_list = list_items_of_kind(repo, 'icons')
     except munkirepo.RepoError as err:
-        raise RepoCopyError(u'Unable to get list of current icons: %s' % err)
-    if icon_path in icon_list:
-        return True
-    return False
+        raise RepoCopyError(f'Unable to get list of current icons: {err}')
+    return icon_path in icon_list
 
 
 def add_icon_hash_to_pkginfo(pkginfo):
@@ -341,12 +326,10 @@ def add_icon_hash_to_pkginfo(pkginfo):
 def generate_png_from_startosinstall_item(repo, dmg_path, pkginfo):
     '''Generates a product icon from a startosinstall item
     and uploads to the repo. Returns repo path to icon or None'''
-    mountpoints = dmgutils.mountdmg(dmg_path)
-    if mountpoints:
+    if mountpoints := dmgutils.mountdmg(dmg_path):
         mountpoint = mountpoints[0]
         app_path = osinstaller.find_install_macos_app(mountpoint)
-        icon_path = iconutils.findIconForApp(app_path)
-        if icon_path:
+        if icon_path := iconutils.findIconForApp(app_path):
             try:
                 repo_icon_path = convert_and_install_icon(
                     repo, pkginfo, icon_path)
@@ -362,15 +345,15 @@ def generate_png_from_startosinstall_item(repo, dmg_path, pkginfo):
 def generate_png_from_dmg_item(repo, dmg_path, pkginfo):
     '''Generates a product icon from a copy_from_dmg item
     and uploads to the repo. Returns repo path to icon or None'''
-    mountpoints = dmgutils.mountdmg(dmg_path)
-    if mountpoints:
+    if mountpoints := dmgutils.mountdmg(dmg_path):
         mountpoint = mountpoints[0]
-        apps = [item for item in pkginfo.get('items_to_copy', [])
-                if item.get('source_item', '').endswith('.app')]
-        if apps:
+        if apps := [
+            item
+            for item in pkginfo.get('items_to_copy', [])
+            if item.get('source_item', '').endswith('.app')
+        ]:
             app_path = os.path.join(mountpoint, apps[0]['source_item'])
-            icon_path = iconutils.findIconForApp(app_path)
-            if icon_path:
+            if icon_path := iconutils.findIconForApp(app_path):
                 try:
                     repo_icon_path = convert_and_install_icon(
                         repo, pkginfo, icon_path)
@@ -391,8 +374,7 @@ def generate_pngs_from_pkg(repo, item_path, pkginfo, import_multiple=True):
     pkg_path = None
     if pkgutils.hasValidDiskImageExt(item_path):
         dmg_path = item_path
-        mountpoints = dmgutils.mountdmg(dmg_path)
-        if mountpoints:
+        if mountpoints := dmgutils.mountdmg(dmg_path):
             mountpoint = mountpoints[0]
             if pkginfo.get('package_path'):
                 pkg_path = os.path.join(mountpoint, pkginfo['package_path'])
@@ -416,14 +398,12 @@ def generate_pngs_from_pkg(repo, item_path, pkginfo, import_multiple=True):
     if len(icon_paths) == 1:
         return convert_and_install_icon(repo, pkginfo, icon_paths[0])
     elif len(icon_paths) > 1 and import_multiple:
-        index = 1
         imported_paths = []
-        for icon_path in icon_paths:
-            imported_path = convert_and_install_icon(
-                repo, pkginfo, icon_path, index=index)
-            if imported_path:
+        for index, icon_path in enumerate(icon_paths, start=1):
+            if imported_path := convert_and_install_icon(
+                repo, pkginfo, icon_path, index=index
+            ):
                 imported_paths.append(imported_path)
-            index += 1
         return "\n\t".join(imported_paths)
     return None
 

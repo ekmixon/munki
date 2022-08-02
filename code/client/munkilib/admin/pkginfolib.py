@@ -62,8 +62,7 @@ class PkgInfoGenerationError(Exception):
 def make_pkginfo_metadata():
     '''Records information about the environment in which the pkginfo was
 created so we have a bit of an audit trail. Returns a dictionary.'''
-    metadata = {}
-    metadata['created_by'] = NSUserName()
+    metadata = {'created_by': NSUserName()}
     metadata['creation_date'] = NSDate.new()
     metadata['munki_version'] = info.get_version()
     metadata['os_version'] = osutils.getOsVersion(only_major_minor=False)
@@ -97,8 +96,7 @@ def get_catalog_info_from_path(pkgpath, options):
     if os.path.exists(pkgpath):
         cataloginfo = pkgutils.getPackageMetaData(pkgpath)
         if options.installer_choices_xml:
-            installer_choices_xml = pkgutils.getChoiceChangesXML(pkgpath)
-            if installer_choices_xml:
+            if installer_choices_xml := pkgutils.getChoiceChangesXML(pkgpath):
                 cataloginfo['installer_choices_xml'] = installer_choices_xml
 
     if cataloginfo:
@@ -132,27 +130,28 @@ def get_catalog_info_for_profile(profile_path):
     '''Populates some metadata for profile pkginfo'''
     cataloginfo = {}
     profile = profiles.read_profile(profile_path)
-    if profile.get('PayloadType') == 'Configuration':
-        try:
-            cataloginfo['PayloadIdentifier'] = profile['PayloadIdentifier']
-        except (KeyError, AttributeError):
-            # this thing is broken! return the empty info
-            return cataloginfo
-        cataloginfo['name'] = os.path.basename(profile_path)
-        cataloginfo['display_name'] = profile.get(
-            'PayloadDisplayName', cataloginfo['name'])
-        cataloginfo['description'] = profile.get('PayloadDescription', '')
-        cataloginfo['version'] = '1.0'
-        cataloginfo['installer_type'] = 'profile'
-        cataloginfo['uninstallable'] = True
-        cataloginfo['uninstall_method'] = 'remove_profile'
-        cataloginfo['unattended_install'] = True
-        cataloginfo['unattended_uninstall'] = True
-        cataloginfo['minimum_os_version'] = '10.7'
-        cataloginfo['minimum_munki_version'] = '2.2'
-    else:
+    if profile.get('PayloadType') != 'Configuration':
         raise ProfileMetadataGenerationError(
-            'Profile PayloadType is %s' % profile.get('PayloadType'))
+            f"Profile PayloadType is {profile.get('PayloadType')}"
+        )
+
+    try:
+        cataloginfo['PayloadIdentifier'] = profile['PayloadIdentifier']
+    except (KeyError, AttributeError):
+        # this thing is broken! return the empty info
+        return cataloginfo
+    cataloginfo['name'] = os.path.basename(profile_path)
+    cataloginfo['display_name'] = profile.get(
+        'PayloadDisplayName', cataloginfo['name'])
+    cataloginfo['description'] = profile.get('PayloadDescription', '')
+    cataloginfo['version'] = '1.0'
+    cataloginfo['installer_type'] = 'profile'
+    cataloginfo['uninstallable'] = True
+    cataloginfo['uninstall_method'] = 'remove_profile'
+    cataloginfo['unattended_install'] = True
+    cataloginfo['unattended_uninstall'] = True
+    cataloginfo['minimum_os_version'] = '10.7'
+    cataloginfo['minimum_munki_version'] = '2.2'
     return cataloginfo
 
 
@@ -168,7 +167,7 @@ def get_catalog_info_from_dmg(dmgpath, options):
     was_already_mounted = dmgutils.diskImageIsMounted(dmgpath)
     mountpoints = dmgutils.mountdmg(dmgpath, use_existing_mounts=True)
     if not mountpoints:
-        raise PkgInfoGenerationError("Could not mount %s!" % dmgpath)
+        raise PkgInfoGenerationError(f"Could not mount {dmgpath}!")
 
     if options.pkgname:
         pkgpath = os.path.join(mountpoints[0], options.pkgname)
@@ -222,8 +221,7 @@ def get_catalog_info_from_dmg(dmgpath, options):
             else:
                 if not was_already_mounted:
                     dmgutils.unmountdmg(mountpoints[0])
-                raise PkgInfoGenerationError(
-                    "%s not found on disk image." % item)
+                raise PkgInfoGenerationError(f"{item} not found on disk image.")
         else:
             # no item specified; look for an application at root of
             # mounted dmg
@@ -241,7 +239,7 @@ def get_catalog_info_from_dmg(dmgpath, options):
             if os.path.isabs(item):
                 # Absolute path given
                 # Remove the mountpoint from item path
-                mountpoint_pattern = "^%s/" % mountpoints[0]
+                mountpoint_pattern = f"^{mountpoints[0]}/"
                 item = re.sub(mountpoint_pattern, '', item)
 
             if options.destitemname:
@@ -293,9 +291,8 @@ def get_catalog_info_from_dmg(dmgpath, options):
 def readfile(path):
     '''Reads file at path. Returns a string.'''
     try:
-        fileobject = open(os.path.expanduser(path), mode='r')
-        data = fileobject.read()
-        fileobject.close()
+        with open(os.path.expanduser(path), mode='r') as fileobject:
+            data = fileobject.read()
         return data
     except (OSError, IOError):
         print("Couldn't read %s" % path, file=sys.stderr)
@@ -309,12 +306,11 @@ def read_file_or_string(option_value):
 
     Otherwise, return the string.
     """
-    if os.path.exists(os.path.expanduser(option_value)):
-        string = readfile(option_value)
-    else:
-        string = option_value
-
-    return string
+    return (
+        readfile(option_value)
+        if os.path.exists(os.path.expanduser(option_value))
+        else option_value
+    )
 
 
 def getiteminfo(itempath):
@@ -339,8 +335,12 @@ def getiteminfo(itempath):
             # just grab the highest version if more than one is listed
             versions = [item[1] for item in
                         plist['LSMinimumSystemVersionByArchitecture'].items()]
-            highest_version = str(max([pkgutils.MunkiLooseVersion(version)
-                                       for version in versions]))
+            highest_version = str(
+                max(
+                    pkgutils.MunkiLooseVersion(version) for version in versions
+                )
+            )
+
             infodict['minosversion'] = highest_version
         elif 'SystemVersionCheck:MinimumSystemVersion' in plist:
             infodict['minosversion'] = \

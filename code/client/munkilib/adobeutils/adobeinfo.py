@@ -106,57 +106,49 @@ def get_payload_info(dirpath):
     payloadinfo = {}
     # look for .proxy.xml file dir
     if os.path.isdir(dirpath):
-        proxy_paths = glob(os.path.join(dirpath, '*.proxy.xml'))
-        if proxy_paths:
+        if proxy_paths := glob(os.path.join(dirpath, '*.proxy.xml')):
             xmlpath = proxy_paths[0]
             dom = minidom.parse(xmlpath)
-        # if there's no .proxy.xml we should hope there's a Media_db.db
         else:
             db_path = os.path.join(dirpath, 'Media_db.db')
-            if os.path.exists(db_path):
-                conn = sqlite3.connect(db_path)
-                cur = conn.cursor()
-                cur.execute("SELECT value FROM PayloadData WHERE "
-                            "PayloadData.key = 'PayloadInfo'")
-                result = cur.fetchone()
-                cur.close()
-                if result:
-                    info_xml = result[0].encode('UTF-8')
-                    dom = minidom.parseString(info_xml)
-            else:
+            if not os.path.exists(db_path):
                 # no xml, no db, no payload info!
                 return payloadinfo
 
-        payload_info = dom.getElementsByTagName('PayloadInfo')
-        if payload_info:
-            installer_properties = payload_info[0].getElementsByTagName(
-                'InstallerProperties')
-            if installer_properties:
+            conn = sqlite3.connect(db_path)
+            cur = conn.cursor()
+            cur.execute("SELECT value FROM PayloadData WHERE "
+                        "PayloadData.key = 'PayloadInfo'")
+            result = cur.fetchone()
+            cur.close()
+            if result:
+                info_xml = result[0].encode('UTF-8')
+                dom = minidom.parseString(info_xml)
+        if payload_info := dom.getElementsByTagName('PayloadInfo'):
+            if installer_properties := payload_info[0].getElementsByTagName(
+                'InstallerProperties'
+            ):
                 properties = installer_properties[0].getElementsByTagName(
                     'Property')
                 for prop in properties:
                     if 'name' in list(prop.attributes.keys()):
                         propname = prop.attributes['name'].value.encode('UTF-8')
-                        propvalue = ''
-                        for node in prop.childNodes:
-                            propvalue += node.nodeValue
+                        propvalue = ''.join(node.nodeValue for node in prop.childNodes)
                         if propname == 'AdobeCode':
                             payloadinfo['AdobeCode'] = propvalue
-                        if propname == 'ProductName':
+                        elif propname == 'ProductName':
                             payloadinfo['display_name'] = propvalue
-                        if propname == 'ProductVersion':
+                        elif propname == 'ProductVersion':
                             payloadinfo['version'] = propvalue
 
-            installmetadata = payload_info[0].getElementsByTagName(
-                'InstallDestinationMetadata')
-            if installmetadata:
-                totalsizes = installmetadata[0].getElementsByTagName(
-                    'TotalSize')
-                if totalsizes:
-                    installsize = ''
-                    for node in totalsizes[0].childNodes:
-                        installsize += node.nodeValue
-                    payloadinfo['installed_size'] = int(int(installsize)/1024)
+            if installmetadata := payload_info[0].getElementsByTagName(
+                'InstallDestinationMetadata'
+            ):
+                if totalsizes := installmetadata[0].getElementsByTagName(
+                    'TotalSize'
+                ):
+                    installsize = ''.join(node.nodeValue for node in totalsizes[0].childNodes)
+                    payloadinfo['installed_size'] = int(installsize) // 1024
 
     return payloadinfo
 
@@ -176,27 +168,23 @@ def get_adobe_setup_info(installroot):
             setupxml = os.path.join(path, 'setup.xml')
             if os.path.exists(setupxml):
                 dom = minidom.parse(setupxml)
-                drivers = dom.getElementsByTagName('Driver')
-                if drivers:
+                if drivers := dom.getElementsByTagName('Driver'):
                     driver = drivers[0]
                     if 'folder' in list(driver.attributes.keys()):
                         driverfolder = driver.attributes[
                             'folder'].value.encode('UTF-8')
                 if driverfolder == '':
-                    # look for mediaSignature (CS5 AAMEE install)
-                    setup_elements = dom.getElementsByTagName('Setup')
-                    if setup_elements:
-                        media_signature_elements = setup_elements[
-                            0].getElementsByTagName('mediaSignature')
-                        if media_signature_elements:
+                    if setup_elements := dom.getElementsByTagName('Setup'):
+                        if media_signature_elements := setup_elements[
+                            0
+                        ].getElementsByTagName('mediaSignature'):
                             element = media_signature_elements[0]
                             for node in element.childNodes:
                                 media_signature += node.nodeValue
 
             for item in osutils.listdir(path):
                 payloadpath = os.path.join(path, item)
-                payloadinfo = get_payload_info(payloadpath)
-                if payloadinfo:
+                if payloadinfo := get_payload_info(payloadpath):
                     payloads.append(payloadinfo)
                     if ((driverfolder and item == driverfolder) or
                             (media_signature and
@@ -213,8 +201,7 @@ def get_adobe_setup_info(installroot):
                     #skip LanguagePacks
                     if item.find("LanguagePack") == -1:
                         itempath = os.path.join(path, item)
-                        payloadinfo = get_payload_info(itempath)
-                        if payloadinfo:
+                        if payloadinfo := get_payload_info(itempath):
                             payloads.append(payloadinfo)
 
                 # we found an extensions dir,
@@ -248,11 +235,10 @@ def get_adobe_package_info(installroot):
     if os.path.exists(installerxml):
         description = ''
         dom = minidom.parse(installerxml)
-        installinfo = dom.getElementsByTagName("InstallInfo")
-        if installinfo:
-            packagedescriptions = \
-                installinfo[0].getElementsByTagName("PackageDescription")
-            if packagedescriptions:
+        if installinfo := dom.getElementsByTagName("InstallInfo"):
+            if packagedescriptions := installinfo[0].getElementsByTagName(
+                "PackageDescription"
+            ):
                 prop = packagedescriptions[0]
                 for node in prop.childNodes:
                     description += node.nodeValue
@@ -269,15 +255,12 @@ def get_adobe_package_info(installroot):
             installerxml = os.path.join(installroot, "optionXML.xml")
             if os.path.exists(installerxml):
                 dom = minidom.parse(installerxml)
-                installinfo = dom.getElementsByTagName("InstallInfo")
-                if installinfo:
-                    pkgname_elems = installinfo[0].getElementsByTagName(
-                        "PackageName")
-                    if pkgname_elems:
+                if installinfo := dom.getElementsByTagName("InstallInfo"):
+                    if pkgname_elems := installinfo[0].getElementsByTagName(
+                        "PackageName"
+                    ):
                         prop = pkgname_elems[0]
-                        pkgname = ""
-                        for node in prop.childNodes:
-                            pkgname += node.nodeValue
+                        pkgname = "".join(node.nodeValue for node in prop.childNodes)
                         info['display_name'] = pkgname
 
     if not info.get('display_name'):
@@ -288,13 +271,11 @@ def get_adobe_package_info(installroot):
 def get_xml_text_element(dom_node, name):
     '''Returns the text value of the first item found with the given
     tagname'''
-    value = None
-    subelements = dom_node.getElementsByTagName(name)
-    if subelements:
-        value = ''
-        for node in subelements[0].childNodes:
-            value += node.nodeValue
-    return value
+    return (
+        ''.join(node.nodeValue for node in subelements[0].childNodes)
+        if (subelements := dom_node.getElementsByTagName(name))
+        else None
+    )
 
 
 def parse_option_xml(option_xml_file):
@@ -302,8 +283,7 @@ def parse_option_xml(option_xml_file):
     them in a dictionary'''
     info = {}
     dom = minidom.parse(option_xml_file)
-    installinfo = dom.getElementsByTagName('InstallInfo')
-    if installinfo:
+    if installinfo := dom.getElementsByTagName('InstallInfo'):
         if 'id' in list(installinfo[0].attributes.keys()):
             info['packager_id'] = installinfo[0].attributes['id'].value
         if 'version' in list(installinfo[0].attributes.keys()):
@@ -314,44 +294,33 @@ def parse_option_xml(option_xml_file):
         info['package_id'] = get_xml_text_element(installinfo[0], 'PackageID')
         info['products'] = []
 
-        # CS5 to CC 2015.0-2015.2 releases use RIBS, and we retrieve a
-        # display name, version and 'mediaSignature' for building installs
-        # items. SAPCode is also stored so that we can later search by this
-        # key across both RIBS and HyperDrive installer metadata.
-        medias_elements = installinfo[0].getElementsByTagName('Medias')
-        if medias_elements:
-            media_elements = medias_elements[0].getElementsByTagName('Media')
-            if media_elements:
+        if medias_elements := installinfo[0].getElementsByTagName('Medias'):
+            if media_elements := medias_elements[0].getElementsByTagName(
+                'Media'
+            ):
                 for media in media_elements:
-                    product = {}
-                    product['prodName'] = get_xml_text_element(
-                        media, 'prodName')
+                    product = {'prodName': get_xml_text_element(media, 'prodName')}
                     product['prodVersion'] = get_xml_text_element(
                         media, 'prodVersion')
                     product['SAPCode'] = get_xml_text_element(media, 'SAPCode')
-                    setup_elements = media.getElementsByTagName('Setup')
-                    if setup_elements:
-                        media_signature_elements = setup_elements[
-                            0].getElementsByTagName('mediaSignature')
-                        if media_signature_elements:
+                    if setup_elements := media.getElementsByTagName('Setup'):
+                        if media_signature_elements := setup_elements[
+                            0
+                        ].getElementsByTagName('mediaSignature'):
                             product['mediaSignature'] = ''
                             element = media_signature_elements[0]
                             for node in element.childNodes:
                                 product['mediaSignature'] += node.nodeValue
                     info['products'].append(product)
 
-        # HD (HyperDrive) media for new mid-June 2016 products. We need the
-        # SAP codes, versions, and which ones are MediaType 'Product'. Support
-        # payloads seem to all be 'STI', and are listed as STIDependencies under
-        # the main product.
-        hd_medias_elements = installinfo[0].getElementsByTagName('HDMedias')
-        if hd_medias_elements:
-            hd_media_elements = hd_medias_elements[0].getElementsByTagName(
-                'HDMedia')
-            if hd_media_elements:
+        if hd_medias_elements := installinfo[0].getElementsByTagName(
+            'HDMedias'
+        ):
+            if hd_media_elements := hd_medias_elements[0].getElementsByTagName(
+                'HDMedia'
+            ):
                 for hd_media in hd_media_elements:
-                    product = {}
-                    product['hd_installer'] = True
+                    product = {'hd_installer': True}
                     # productVersion is the 'full' version number
                     # prodVersion seems to be the "customer-facing" version for
                     # this update
@@ -374,22 +343,24 @@ def parse_option_xml(option_xml_file):
 def get_hd_installer_info(hd_payload_root, sap_code):
     '''Attempts to extract some information from a HyperDrive payload
     application.json file and return a reduced set in a dict'''
-    hd_app_info = {}
     app_json_path = os.path.join(hd_payload_root, sap_code, 'Application.json')
     json_info = json.loads(open(app_json_path, 'r').read())
 
-    # Copy some useful top-level keys, useful later for:
-    # - Name: display_name pkginfo key
-    # - ProductVersion: version pkginfo key and uninstall XML location
-    # - SAPCode: an uninstallXml for an installs item if it's a 'core' Type
-    # - BaseVersion and version: not currently used but may be useful once
-    #   there are more HD installers in the future
-    for key in ['BaseVersion', 'Name', 'ProductVersion', 'SAPCode', 'version']:
-        hd_app_info[key] = json_info[key]
+    hd_app_info = {
+        key: json_info[key]
+        for key in [
+            'BaseVersion',
+            'Name',
+            'ProductVersion',
+            'SAPCode',
+            'version',
+        ]
+    }
+
     hd_app_info['SAPCode'] = json_info['SAPCode']
 
     # Adobe puts an array of dicts in a dict with one key called 'Package'
-    pkgs = [pkg for pkg in json_info['Packages']['Package']]
+    pkgs = list(json_info['Packages']['Package'])
     hd_app_info['Packages'] = pkgs
     return hd_app_info
 
@@ -413,16 +384,12 @@ def get_cs5_media_signature(dirpath):
     if os.path.exists(setupxml) and os.path.isfile(setupxml):
         # parse the XML
         dom = minidom.parse(setupxml)
-        setup_elements = dom.getElementsByTagName('Setup')
-        if setup_elements:
-            media_signature_elements = (
-                setup_elements[0].getElementsByTagName('mediaSignature'))
-            if media_signature_elements:
+        if setup_elements := dom.getElementsByTagName('Setup'):
+            if media_signature_elements := (
+                setup_elements[0].getElementsByTagName('mediaSignature')
+            ):
                 element = media_signature_elements[0]
-                elementvalue = ''
-                for node in element.childNodes:
-                    elementvalue += node.nodeValue
-                return elementvalue
+                return ''.join(node.nodeValue for node in element.childNodes)
 
     return ""
 
@@ -431,15 +398,14 @@ def get_cs5_uninstall_xml(option_xml_file):
     '''Gets the uninstall deployment data from a CS5 installer'''
     xml = ''
     dom = minidom.parse(option_xml_file)
-    deployment_info = dom.getElementsByTagName('DeploymentInfo')
-    if deployment_info:
+    if deployment_info := dom.getElementsByTagName('DeploymentInfo'):
         for info_item in deployment_info:
-            deployment_uninstall = info_item.getElementsByTagName(
-                'DeploymentUninstall')
-            if deployment_uninstall:
-                deployment_data = deployment_uninstall[0].getElementsByTagName(
-                    'Deployment')
-                if deployment_data:
+            if deployment_uninstall := info_item.getElementsByTagName(
+                'DeploymentUninstall'
+            ):
+                if deployment_data := deployment_uninstall[
+                    0
+                ].getElementsByTagName('Deployment'):
                     deployment = deployment_data[0]
                     xml += deployment.toxml('UTF-8')
     return xml

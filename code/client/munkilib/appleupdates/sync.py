@@ -166,13 +166,15 @@ class AppleUpdateSync(object):
                 # there should not be a file or directory at that path!
                 # move it
                 new_name = os.path.join(
-                    '/tmp', ('munki_swupd_cache_moved_%s'
-                             % time.strftime('%Y.%m.%d.%H.%M.%S')))
+                    '/tmp',
+                    f"munki_swupd_cache_moved_{time.strftime('%Y.%m.%d.%H.%M.%S')}",
+                )
+
                 os.rename(self.cache_dir, new_name)
             os.symlink(real_cache_dir, self.cache_dir)
         except (OSError, IOError) as err:
             # error in setting up the cache directories
-            raise Error('Could not configure cache directory: %s' % err)
+            raise Error(f'Could not configure cache directory: {err}')
 
         self.temp_cache_dir = os.path.join(self.cache_dir, 'mirror')
         self.local_catalog_dir = os.path.join(
@@ -198,27 +200,23 @@ class AppleUpdateSync(object):
         """
         # pylint: disable=no-self-use
         os_version_tuple = osutils.getOsVersion(as_tuple=True)
-        # Prefer Munki's preferences file in OS X <= 10.10
-        munkisuscatalog = prefs.pref('SoftwareUpdateServerURL')
-        if munkisuscatalog:
+        if munkisuscatalog := prefs.pref('SoftwareUpdateServerURL'):
             if os_version_tuple < (10, 11):
                 # only pay attention to Munki's SoftwareUpdateServerURL pref
                 # in 10.10 and earlier
                 return munkisuscatalog
 
-        # Otherwise prefer MCX or /Library/Preferences/com.apple.SoftwareUpdate
-        prefs_catalog_url = su_prefs.pref('CatalogURL')
-        if prefs_catalog_url:
+        if prefs_catalog_url := su_prefs.pref('CatalogURL'):
             return prefs_catalog_url
 
         # Finally, fall back to using a hard-coded url in DEFAULT_CATALOG_URLS.
         os_version = osutils.getOsVersion()
-        catalog_url = DEFAULT_CATALOG_URLS.get(os_version, None)
-        if catalog_url:
+        if catalog_url := DEFAULT_CATALOG_URLS.get(os_version, None):
             return catalog_url
 
         raise CatalogNotFoundError(
-            'No default Software Update CatalogURL for macOS %s' % os_version)
+            f'No default Software Update CatalogURL for macOS {os_version}'
+        )
 
     def copy_downloaded_catalog(self, _open=open):
         """Copy the downloaded catalog to a new file, extracting if gzipped.
@@ -307,7 +305,7 @@ class AppleUpdateSync(object):
         Returns:
           A str URL, rewritten if needed to point to the local cache.
         """
-        local_base_url = 'file://localhost' + quote(self.cache_dir)
+        local_base_url = f'file://localhost{quote(self.cache_dir)}'
         if full_url.startswith(local_base_url):
             return full_url  # url is already local, so just return it.
         return local_base_url + self._get_url_path(full_url)
@@ -344,7 +342,7 @@ class AppleUpdateSync(object):
           rewrite_pkg_urls: Boolean, if True package URLs are rewritten,
               otherwise only MetadataURLs are rewritten.
         """
-        if not 'Products' in catalog:
+        if 'Products' not in catalog:
             return
 
         for product_key in catalog['Products'].keys():
@@ -395,10 +393,8 @@ class AppleUpdateSync(object):
         darwin_version = os.uname()[2]
         # Set the User-Agent header to match that used by Apple's
         # softwareupdate client for better compatibility.
-        user_agent_header = (
-            "User-Agent: managedsoftwareupdate/%s Darwin/%s (%s) (%s)"
-            % (machine['munki_version'], darwin_version,
-               machine['arch'], machine['machine_model']))
+        user_agent_header = f"User-Agent: managedsoftwareupdate/{machine['munki_version']} Darwin/{darwin_version} ({machine['arch']}) ({machine['machine_model']})"
+
         return fetch.getResourceIfChangedAtomically(
             url, destinationpath, custom_headers=[user_agent_header],
             resume=resume, follow_redirects=True)
@@ -409,7 +405,7 @@ class AppleUpdateSync(object):
         machine and writes a new sucatalog that refers to the local copies
         of these files."""
         catalog = FoundationPlist.readPlist(self.extracted_catalog_path)
-        if not 'Products' in catalog:
+        if 'Products' not in catalog:
             display.display_warning(
                 '"Products" not found in %s', self.extracted_catalog_path)
             return
@@ -420,13 +416,12 @@ class AppleUpdateSync(object):
             if product_key not in catalog['Products']:
                 if product_key.startswith("MSU_UPDATE_"):
                     # BigSur+ updates don't have metadata in the sucatalog
-                    display.display_info(
-                        'Skipping metadata caching for product ID %s'
-                        % product_key)
+                    display.display_info(f'Skipping metadata caching for product ID {product_key}')
                 else:
                     display.display_warning(
-                        'Could not cache metadata for product ID %s'
-                        % product_key)
+                        f'Could not cache metadata for product ID {product_key}'
+                    )
+
                 continue
             display.display_status_minor(
                 'Caching metadata for product ID %s', product_key)
@@ -489,10 +484,11 @@ class AppleUpdateSync(object):
         # pylint: disable=no-self-use
         localization_preferences = (
             prefs.pref('AppleSoftwareUpdateLanguages') or ['English'])
-        preferred_langs = (
+        if preferred_langs := (
             NSBundle.preferredLocalizationsFromArray_forPreferences_(
-                list(list_of_localizations), localization_preferences))
-        if preferred_langs:
+                list(list_of_localizations), localization_preferences
+            )
+        ):
             return preferred_langs[0]
 
         # first fallback, return en or English
@@ -523,16 +519,13 @@ class AppleUpdateSync(object):
             catalog = FoundationPlist.readPlist(sucatalog)
         except FoundationPlist.NSPropertyListSerializationException:
             return None
-        product = catalog.get('Products', {}).get(product_key, {})
-        if product:
-            distributions = product.get('Distributions', {})
-            if distributions:
+        if product := catalog.get('Products', {}).get(product_key, {}):
+            if distributions := product.get('Distributions', {}):
                 available_languages = list(distributions.keys())
-                if language:
-                    preferred_language = language
-                else:
-                    preferred_language = self._preferred_localization(
-                        available_languages)
+                preferred_language = language or self._preferred_localization(
+                    available_languages
+                )
+
                 url = distributions[preferred_language]
                 # do we already have it in /Library/Updates?
                 filename = os.path.basename(self._get_url_path(url))

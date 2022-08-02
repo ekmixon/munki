@@ -90,8 +90,11 @@ def main():
     try:
         repo = munkirepo.connect(options.repo_url, options.plugin)
     except munkirepo.RepoError as err:
-        print(u'Could not connect to munki repo: %s' % unicode_or_str(err),
-              file=sys.stderr)
+        print(
+            f'Could not connect to munki repo: {unicode_or_str(err)}',
+            file=sys.stderr,
+        )
+
         exit(-1)
 
     # Make the catalogs

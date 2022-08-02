@@ -81,29 +81,28 @@ def parse_su_update_line_new_style(line):
 def parse_su_update_line_old_style(line):
     '''Parses an old-style (pre-10.15) softwareupdate -l output line
     into a dict'''
-    info = {}
     # strip leading and trailing whitespace
     line = line.strip()
     title, seperator, line = line.partition("(")
-    if not seperator == "(":
+    if seperator != "(":
         # no idea of the format, just return an empty dict
         return {}
-    info['Title'] = title.rstrip()
+    info = {'Title': title.rstrip()}
     version, seperator, line = line.partition(")")
-    if not seperator == ")":
+    if seperator != ")":
         # no idea of the format, just return an empty dict
         return {}
     info['Version'] = version
     line = line.lstrip(', ')
     size, seperator, line = line.partition('K')
     if seperator == 'K':
-        info['Size'] = '%sK' % size
+        info['Size'] = f'{size}K'
     # now start from the end
     if line.endswith(" [restart]"):
-        line = line[0:-len(" [restart]")]
+        line = line[:-len(" [restart]")]
         info['Action'] = 'restart'
     if line.endswith(" [recommended]"):
-        line = line[0:-len(" [recommended]")]
+        line = line[:-len(" [recommended]")]
         info['Recommended'] = 'YES'
     else:
         info['Recommended'] = 'NO'
@@ -123,7 +122,7 @@ def parse_su_identifier(line):
     # (let's hope there are no hyphens in the versions!)
     vers = update_parts[-1]
     # identifier is everything before the last hyphen
-    identifier = '-'.join(update_parts[0:-1])
+    identifier = '-'.join(update_parts[:-1])
     return {'full_identifier': update_entry,
             'identifier': identifier,
             'version': vers}

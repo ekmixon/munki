@@ -133,8 +133,7 @@ class ApplicationUsageRecorder(object):
         if database_name is None:
             database_name = APPLICATION_USAGE_DB
 
-        conn = sqlite3.connect(database_name)
-        return conn
+        return sqlite3.connect(database_name)
 
     def _close(self, conn):
         """Close database.
@@ -284,10 +283,10 @@ class ApplicationUsageRecorder(object):
                 query = conn.execute(table['select_sql'])
                 try:
                     while True:
-                        row = query.fetchone()
-                        if not row:
+                        if row := query.fetchone():
+                            table['rows'].append(row)
+                        else:
                             break
-                        table['rows'].append(row)
                 except sqlite3.Error:
                     pass
                     # ok, done, hit an error
@@ -335,15 +334,15 @@ class ApplicationUsageRecorder(object):
         except sqlite3.Error:
             query_ok = False
 
-        if not query_ok:
-            if fix:
-                logging.warning('Recreating database.')
-                logging.warning(
-                    'Recovered %d rows.', self._recreate_database())
-            else:
-                logging.warning('Database is malformed.')
-        else:
+        if query_ok:
             logging.info('Database is OK.')
+
+        elif fix:
+            logging.warning('Recreating database.')
+            logging.warning(
+                'Recovered %d rows.', self._recreate_database())
+        else:
+            logging.warning('Database is malformed.')
 
     def log_application_usage(self, event, app_dict):
         """Log application usage.
@@ -467,9 +466,7 @@ class ApplicationUsageQuery(object):
             return None
         try:
             query = self.conn.execute(usage_query, (event, bundle_id))
-            # should be only one!
-            row = query.fetchone()
-            if row:
+            if row := query.fetchone():
                 time_diff = int(time.time()) - int(row[0])
                 return int(time_diff/self.day_in_seconds)
             # no row
@@ -495,9 +492,7 @@ class ApplicationUsageQuery(object):
             return None
         try:
             query = self.conn.execute(install_query, (event, item_name))
-            # should be only one!
-            row = query.fetchone()
-            if row:
+            if row := query.fetchone():
                 time_diff = int(time.time()) - int(row[0])
                 return int(time_diff/self.day_in_seconds)
             # no row

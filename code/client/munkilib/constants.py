@@ -20,6 +20,7 @@ Created by Greg Neagle on 2016-12-14.
 
 Commonly used constants
 """
+
 from __future__ import absolute_import, print_function
 
 # NOTE: it's very important that defined exit codes are never changed!
@@ -38,9 +39,11 @@ BUNDLE_ID = 'ManagedInstalls'
 # the following two items are not used internally by Munki
 # any longer, but remain for backwards compatibility with
 # pre and postflight script that might access these files directly
-MANAGED_INSTALLS_PLIST_PATH = '/Library/Preferences/' + BUNDLE_ID + '.plist'
-SECURE_MANAGED_INSTALLS_PLIST_PATH = \
-    '/private/var/root/Library/Preferences/' + BUNDLE_ID + '.plist'
+MANAGED_INSTALLS_PLIST_PATH = f'/Library/Preferences/{BUNDLE_ID}.plist'
+SECURE_MANAGED_INSTALLS_PLIST_PATH = (
+    f'/private/var/root/Library/Preferences/{BUNDLE_ID}.plist'
+)
+
 
 ADDITIONAL_HTTP_HEADERS_KEY = 'AdditionalHttpHeaders'
 

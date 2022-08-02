@@ -44,9 +44,8 @@ KEYCHAIN_DIRECTORY = os.path.join(
 def read_file(pathname):
     '''Return the contents of pathname as a string'''
     try:
-        fileobj = open(pathname, mode='r')
-        data = fileobj.read()
-        fileobj.close()
+        with open(pathname, mode='r') as fileobj:
+            data = fileobj.read()
         return data
     except (OSError, IOError) as err:
         display.display_error(
@@ -58,9 +57,8 @@ def write_file(stringdata, pathname):
     '''Writes stringdata to pathname.
     Returns the pathname on success, empty string on failure.'''
     try:
-        fileobject = open(pathname, mode='w')
-        fileobject.write(stringdata)
-        fileobject.close()
+        with open(pathname, mode='w') as fileobject:
+            fileobject.write(stringdata)
         return pathname
     except (OSError, IOError) as err:
         display.display_error(
@@ -72,8 +70,10 @@ def pem_cert_bytes(cert_path):
     '''Read in a base64 pem file, return raw bytestring of embedded
     certificate'''
     cert_data = read_file(cert_path)
-    if not (('-----BEGIN CERTIFICATE-----' in cert_data) and
-            ('-----END CERTIFICATE-----' in cert_data)):
+    if (
+        '-----BEGIN CERTIFICATE-----' not in cert_data
+        or '-----END CERTIFICATE-----' not in cert_data
+    ):
         raise Exception('Certificate does not appear to be .pem file')
     core_data = cert_data.split(
         '-----BEGIN CERTIFICATE', 1)[-1].replace('\r', '\n').split(
@@ -87,18 +87,15 @@ def pem_cert_sha1_digest(cert_path):
         raw_bytes = pem_cert_bytes(cert_path)
         return hashlib.sha1(raw_bytes).hexdigest().upper()
     except BaseException as err:
-        display.display_error('Error reading %s: %s' % (cert_path, err))
+        display.display_error(f'Error reading {cert_path}: {err}')
         return None
 
 
 def get_munki_server_cert_info():
     '''Attempt to get information we need from Munki's preferences or
     defaults. Returns a dictionary.'''
-    cert_info = {}
+    cert_info = {'ca_cert_path': None, 'ca_dir_path': None}
 
-    # get server CA cert if it exists so we can verify the Munki server
-    cert_info['ca_cert_path'] = None
-    cert_info['ca_dir_path'] = None
     if prefs.pref('SoftwareRepoCAPath'):
         ca_path = prefs.pref('SoftwareRepoCAPath')
         if os.path.isfile(ca_path):
@@ -119,10 +116,11 @@ def get_munki_server_cert_info():
 def get_munki_client_cert_info():
     '''Attempt to get information we need from Munki's preferences or
     defaults. Returns a dictionary.'''
-    cert_info = {}
-    cert_info['client_cert_path'] = None
-    cert_info['client_key_path'] = None
-    cert_info['site_urls'] = []
+    cert_info = {
+        'client_cert_path': None,
+        'client_key_path': None,
+        'site_urls': [],
+    }
 
     # get client cert if it exists
     if prefs.pref('UseClientCertificate'):
@@ -139,8 +137,7 @@ def get_munki_client_cert_info():
         site_urls = []
         for key in ['SoftwareRepoURL', 'PackageURL', 'CatalogURL',
                     'ManifestURL', 'IconURL', 'ClientResourceURL']:
-            url = prefs.pref(key)
-            if url:
+            if url := prefs.pref(key):
                 site_urls.append(url.rstrip('/') + '/')
         cert_info['site_urls'] = site_urls
     return cert_info
@@ -157,8 +154,7 @@ def get_client_cert_common_name():
         proc = subprocess.Popen(cmd,
                                 bufsize=-1, stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE, stdin=subprocess.PIPE)
-        out = proc.communicate()[0].decode("UTF-8")
-        if out:
+        if out := proc.communicate()[0].decode("UTF-8"):
             for i in out.split('/'):
                 if i.startswith('CN='):
                     common_name = i[3:].rstrip()
@@ -173,15 +169,15 @@ def add_ca_certs_to_system_keychain(cert_info=None):
 
     ca_cert_path = cert_info['ca_cert_path']
     ca_dir_path = cert_info['ca_dir_path']
-    if not ca_cert_path and not ca_dir_path:
+    if ca_cert_path or ca_dir_path:
+        display.display_debug2('CA cert path: %s', ca_cert_path)
+        display.display_debug2('CA dir path:  %s', ca_dir_path)
+
+    else:
         # no CA certs, so nothing to do
         display.display_debug2(
             'No CA cert info provided, so nothing to add to System keychain.')
         return
-    else:
-        display.display_debug2('CA cert path: %s', ca_cert_path)
-        display.display_debug2('CA dir path:  %s', ca_dir_path)
-
     system_keychain = "/Library/Keychains/System.keychain"
     if not os.path.exists(system_keychain):
         display.display_warning('%s not found.', system_keychain)
@@ -195,15 +191,18 @@ def add_ca_certs_to_system_keychain(cert_info=None):
         certs_to_add.append(ca_cert_path)
     if ca_dir_path:
         # add any pem files in the ca_dir_path directory
-        for item in os.listdir(ca_dir_path):
-            if item.endswith('.pem'):
-                certs_to_add.append(os.path.join(ca_dir_path, item))
+        certs_to_add.extend(
+            os.path.join(ca_dir_path, item)
+            for item in os.listdir(ca_dir_path)
+            if item.endswith('.pem')
+        )
+
     for cert in certs_to_add:
         display.display_debug1('Adding CA cert %s...', cert)
         try:
-            output = security('add-trusted-cert', '-d',
-                              '-k', system_keychain, cert)
-            if output:
+            if output := security(
+                'add-trusted-cert', '-d', '-k', system_keychain, cert
+            ):
                 display.display_debug2(output)
         except SecurityError as err:
             display.display_error(
@@ -254,9 +253,9 @@ def make_client_keychain(cert_info=None):
     # create a new keychain
     display.display_debug1('Creating client keychain...')
     try:
-        output = security('create-keychain',
-                          '-p', keychain_pass, abs_keychain_path)
-        if output:
+        if output := security(
+            'create-keychain', '-p', keychain_pass, abs_keychain_path
+        ):
             display.display_debug2(output)
     except SecurityError as err:
         display.display_error(
@@ -290,9 +289,9 @@ def make_client_keychain(cert_info=None):
         # client_cert_file is combined_pem or client_cert_file
         display.display_debug2('Importing client cert and key...')
         try:
-            output = security(
-                'import', client_cert_file, '-A', '-k', abs_keychain_path)
-            if output:
+            if output := security(
+                'import', client_cert_file, '-A', '-k', abs_keychain_path
+            ):
                 display.display_debug2(output)
         except SecurityError as err:
             display.display_error(
@@ -304,11 +303,7 @@ def make_client_keychain(cert_info=None):
         except (OSError, IOError):
             pass
 
-    id_hash = pem_cert_sha1_digest(client_cert_path)
-    if not id_hash:
-        display.display_error(
-            'Cannot create keychain identity preference.')
-    else:
+    if id_hash := pem_cert_sha1_digest(client_cert_path):
         # set up identity preference(s) linking the identity (cert and key)
         # to the various urls
 
@@ -326,41 +321,40 @@ def make_client_keychain(cert_info=None):
             default_keychain = None
         # Temporarily assign the default keychain to ours
         try:
-            output = security(
-                'default-keychain', '-s', abs_keychain_path)
-            if output:
+            if output := security('default-keychain', '-s', abs_keychain_path):
                 display.display_debug2(
                     'Attempting to set default keychain to %s resulted in: %s',
                     abs_keychain_path, output)
         except SecurityError as err:
             display.display_error(
-                'Could not set default keychain to %s failed: %s'
-                % (abs_keychain_path, err))
+                f'Could not set default keychain to {abs_keychain_path} failed: {err}'
+            )
+
             default_keychain = None
         # Create the identity preferences
         for url in site_urls:
             try:
-                display.display_debug2(
-                    'Adding identity preference for %s...' % url)
-                output = security(
+                display.display_debug2(f'Adding identity preference for {url}...')
+                if output := security(
                     'set-identity-preference',
-                    '-s', url, '-Z', id_hash, abs_keychain_path)
-                if output:
-                    display.display_debug2(
-                        'security set-identity-preference output: ' + output)
+                    '-s',
+                    url,
+                    '-Z',
+                    id_hash,
+                    abs_keychain_path,
+                ):
+                    display.display_debug2(f'security set-identity-preference output: {output}')
             except SecurityError as err:
-                display.display_error(
-                    'Setting identity preference for %s failed: %s'
-                    % (url, err))
+                display.display_error(f'Setting identity preference for {url} failed: {err}')
         if default_keychain:
-            # We originally had a different default, set it back
-            output = security(
-                'default-keychain', '-s', default_keychain)
-            if output:
+            if output := security('default-keychain', '-s', default_keychain):
                 display.display_debug2(
                     'Attempting to set default keychain to %s resulted in: %s',
                     default_keychain, output)
 
+    else:
+        display.display_error(
+            'Cannot create keychain identity preference.')
     # we're done, clean up.
     if added_keychain:
         remove_from_keychain_list(abs_keychain_path)
@@ -368,7 +362,8 @@ def make_client_keychain(cert_info=None):
         # switch it back
         os.environ['HOME'] = original_home
     display.display_info(
-        'Completed creation of client keychain at %s' % abs_keychain_path)
+        f'Completed creation of client keychain at {abs_keychain_path}'
+    )
 
 
 def add_to_keychain_list(keychain_path):
@@ -382,14 +377,14 @@ def add_to_keychain_list(keychain_path):
     # Preserve the order in case we need to append to them
     search_keychains = [x.strip().strip('"')
                         for x in output.split('\n') if x.strip()]
-    if not keychain_path in search_keychains:
+    if keychain_path not in search_keychains:
         # Keychain is not in the search paths
         display.display_debug2('Adding client keychain to search path...')
         search_keychains.append(keychain_path)
         try:
-            output = security(
-                'list-keychains', '-d', 'user', '-s', *search_keychains)
-            if output:
+            if output := security(
+                'list-keychains', '-d', 'user', '-s', *search_keychains
+            ):
                 display.display_debug2(output)
             added_keychain = True
         except SecurityError as err:
@@ -416,9 +411,9 @@ def remove_from_keychain_list(keychain_path):
         filtered_keychains = [keychain for keychain in search_keychains
                               if keychain != keychain_path]
         try:
-            output = security(
-                'list-keychains', '-d', 'user', '-s', *filtered_keychains)
-            if output:
+            if output := security(
+                'list-keychains', '-d', 'user', '-s', *filtered_keychains
+            ):
                 display.display_debug2(output)
         except SecurityError as err:
             display.display_error(
@@ -430,9 +425,9 @@ def unlock_and_set_nonlocking(keychain_path):
     keychain_pass = (
         prefs.pref('KeychainPassword') or DEFAULT_KEYCHAIN_PASSWORD)
     try:
-        output = security(
-            'unlock-keychain', '-p', keychain_pass, keychain_path)
-        if output:
+        if output := security(
+            'unlock-keychain', '-p', keychain_pass, keychain_path
+        ):
             display.display_debug2(output)
     except SecurityError as err:
         # some problem unlocking the keychain.
@@ -446,8 +441,7 @@ def unlock_and_set_nonlocking(keychain_path):
                 'Could not remove %s: %s.', keychain_path, err)
         return
     try:
-        output = security('set-keychain-settings', keychain_path)
-        if output:
+        if output := security('set-keychain-settings', keychain_path):
             display.display_debug2(output)
     except SecurityError as err:
         display.display_error(
@@ -480,10 +474,11 @@ def client_certs_newer_than_keychain():
     keychain_mod_time = os.stat(keychain_path).st_mtime
     if os.stat(client_cert_path).st_mtime > keychain_mod_time:
         return True
-    if client_key_path and os.path.exists(client_key_path):
-        if os.stat(client_key_path).st_mtime > keychain_mod_time:
-            return True
-    return False
+    return bool(
+        client_key_path
+        and os.path.exists(client_key_path)
+        and os.stat(client_key_path).st_mtime > keychain_mod_time
+    )
 
 
 def debug_output():
@@ -495,7 +490,7 @@ def debug_output():
         display.display_debug1(security('default-keychain', '-d', 'user'))
         keychainfile = get_keychain_path()
         if os.path.exists(keychainfile):
-            display.display_debug1('***Info for %s***' % keychainfile)
+            display.display_debug1(f'***Info for {keychainfile}***')
             display.display_debug1(
                 security('show-keychain-info', keychainfile))
     except SecurityError as err:
@@ -517,7 +512,7 @@ def security(verb_name, *args):
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     (output, err) = proc.communicate()
     if proc.returncode:
-        raise SecurityError('%s: %s' % (proc.returncode, err.decode("UTF-8")))
+        raise SecurityError(f'{proc.returncode}: {err.decode("UTF-8")}')
     return (output or err).decode("UTF-8")
 
 
@@ -539,9 +534,7 @@ def get_keychain_path():
     # Correct the filename to include '.keychain' if not already present
     if not keychain_name.lower().endswith('.keychain'):
         keychain_name += '.keychain'
-    keychain_path = os.path.realpath(
-        os.path.join(KEYCHAIN_DIRECTORY, keychain_name))
-    return keychain_path
+    return os.path.realpath(os.path.join(KEYCHAIN_DIRECTORY, keychain_name))
 
 
 class MunkiKeychain(object):
@@ -564,8 +557,9 @@ class MunkiKeychain(object):
                 os.unlink(self.keychain_path)
             except (OSError, IOError) as err:
                 display.display_error(
-                    'Could not remove pre-existing %s: %s'
-                    % (self.keychain_path, err))
+                    f'Could not remove pre-existing {self.keychain_path}: {err}'
+                )
+
         if os.path.exists(self.keychain_path):
             # ensure existing keychain is available for use
             self.added_keychain = add_to_keychain_list(self.keychain_path)

@@ -72,7 +72,7 @@ def sighandler(signum, _frame):
 
 def usage(arg0):
     """Print usage."""
-    print('Usage: %s [command to run] [arguments...]' % arg0, file=sys.stderr)
+    print(f'Usage: {arg0} [command to run] [arguments...]', file=sys.stderr)
     return 0
 
 
@@ -89,11 +89,11 @@ def ptyexec(argv):
     signal.signal(signal.SIGCHLD, sighandler)
     pid, fd = pty.fork()
 
-    if pid == 0:         # child
+    if pid == 0: # child
         try:
             os.execv(argv[0], argv)
         except OSError as err:
-            print(str(err), file=sys.stderr)
+            print(err, file=sys.stderr)
             sys.exit(1)
     elif pid > 0:        # parent
         f = os.fdopen(fd, 'rb+', 0)

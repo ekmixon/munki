@@ -76,7 +76,7 @@ def main():
 
     if options.munkistatusoutput:
         pkgcount = len(pkgnames)
-        munkistatus.message("Removing %s packages..." % pkgcount)
+        munkistatus.message(f"Removing {pkgcount} packages...")
         munkistatus.detail("")
 
     retcode = rmpkgs.removepackages(

@@ -106,8 +106,7 @@ def verifyFileOnlyWritableByMunkiAndRoot(file_path):
         elif file_stat.st_mode & stat.S_IWOTH != 0:
             raise InsecureFilePermissionsError('world writable!')
     except InsecureFilePermissionsError as err:
-        raise InsecureFilePermissionsError(
-            '%s is not secure! %s' % (file_path, err.args[0]))
+        raise InsecureFilePermissionsError(f'{file_path} is not secure! {err.args[0]}')
 
 
 def runExternalScript(script, allow_insecure=False, script_args=()):
@@ -124,7 +123,7 @@ def runExternalScript(script, allow_insecure=False, script_args=()):
       RunExternalScriptError: there was an error running the script.
     """
     if not os.path.exists(script):
-        raise ScriptNotFoundError('script does not exist: %s' % script)
+        raise ScriptNotFoundError(f'script does not exist: {script}')
 
     if not allow_insecure:
         try:
@@ -135,7 +134,7 @@ def runExternalScript(script, allow_insecure=False, script_args=()):
             raise RunExternalScriptError(msg)
 
     if not os.access(script, os.X_OK):
-        raise RunExternalScriptError('%s not executable' % script)
+        raise RunExternalScriptError(f'{script} not executable')
 
     cmd = [script]
     if script_args:
@@ -147,8 +146,7 @@ def runExternalScript(script, allow_insecure=False, script_args=()):
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE)
     except (OSError, IOError) as err:
-        raise RunExternalScriptError(
-            u'Error %s when attempting to run %s' % (err, script))
+        raise RunExternalScriptError(f'Error {err} when attempting to run {script}')
     (stdout, stderr) = proc.communicate()
     return (proc.returncode, stdout.decode('UTF-8', 'replace'),
             stderr.decode('UTF-8', 'replace'))
@@ -169,8 +167,7 @@ def getPIDforProcessName(processname):
         line = proc.stdout.readline().decode('UTF-8')
         if not line and (proc.poll() != None):
             break
-        line = line.rstrip('\n')
-        if line:
+        if line := line.rstrip('\n'):
             try:
                 (pid, process) = line.split(None, 1)
             except ValueError:

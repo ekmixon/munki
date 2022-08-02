@@ -52,21 +52,19 @@ def printreportitem(label, value, indent=0):
     """Prints a report item in an 'attractive' way"""
     indentspace = '    '
     if isinstance(value, type(None)):
-        print(indentspace*indent, '%s: !NONE!' % label)
+        print(indentspace*indent, f'{label}: !NONE!')
     elif isinstance(value, list) or type(value).__name__ == 'NSCFArray':
         if label:
-            print(indentspace*indent, '%s:' % label)
-        index = 0
-        for item in value:
-            index += 1
+            print(indentspace*indent, f'{label}:')
+        for index, item in enumerate(value, start=1):
             printreportitem(index, item, indent+1)
     elif isinstance(value, dict) or type(value).__name__ == 'NSCFDictionary':
         if label:
-            print(indentspace*indent, '%s:' % label)
+            print(indentspace*indent, f'{label}:')
         for subkey in value.keys():
             printreportitem(subkey, value[subkey], indent+1)
     else:
-        print(indentspace*indent, '%s: %s' % (label, value))
+        print(indentspace*indent, f'{label}: {value}')
 
 
 def printreport(reportdict):
@@ -96,7 +94,7 @@ def readreport():
 def _warn(msg):
     """We can't use display module functions here because that would require
     circular imports. So a partial reimplementation."""
-    warning = 'WARNING: %s' % msg
+    warning = f'WARNING: {msg}'
     print(warning.encode('UTF-8'), file=sys.stderr)
     munkilog.log(warning)
     # append this warning to our warnings log
@@ -110,8 +108,8 @@ def archive_report():
     if os.path.exists(reportfile):
         modtime = os.stat(reportfile).st_mtime
         formatstr = '%Y-%m-%d-%H%M%S'
-        archivename = ('ManagedInstallReport-%s.plist'
-                       % time.strftime(formatstr, time.localtime(modtime)))
+        archivename = f'ManagedInstallReport-{time.strftime(formatstr, time.localtime(modtime))}.plist'
+
         archivepath = os.path.join(prefs.pref('ManagedInstallDir'), 'Archives')
         if not os.path.exists(archivepath):
             try:
@@ -126,8 +124,7 @@ def archive_report():
         proc = subprocess.Popen(['/bin/ls', '-t1', archivepath],
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE)
-        output = proc.communicate()[0].decode('UTF-8')
-        if output:
+        if output := proc.communicate()[0].decode('UTF-8'):
             archiveitems = [item
                             for item in str(output).splitlines()
                             if item.startswith('ManagedInstallReport-')]
@@ -138,7 +135,7 @@ def archive_report():
                         try:
                             os.unlink(itempath)
                         except (OSError, IOError):
-                            _warn('Could not remove archive item %s' % item)
+                            _warn(f'Could not remove archive item {item}')
 
 
 # module globals

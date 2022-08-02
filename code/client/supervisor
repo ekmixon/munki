@@ -123,9 +123,7 @@ class Supervisor(object):
             stdout_pipe = self.stdout
             self.stderr = tempfile.NamedTemporaryFile()
             stderr_pipe = self.stderr
-            # Parse error-exec-exit-codes, or set default if not provided.
-            exit_codes = self.options['error-exec-exit-codes']
-            if exit_codes:
+            if exit_codes := self.options['error-exec-exit-codes']:
                 self.error_exec_codes = [int(i) for i in exit_codes.split(',')]
             else:
                 self.error_exec_codes = DEFAULT_ERROR_EXEC_EXIT_CODES
@@ -158,9 +156,12 @@ class Supervisor(object):
                     self.exit_status = exit_status
                     break
 
-                if 'timeout' in self.options and self.options['timeout']:
-                    if (time.time() - start_time) > self.options['timeout']:
-                        raise TimeoutError
+                if (
+                    'timeout' in self.options
+                    and self.options['timeout']
+                    and (time.time() - start_time) > self.options['timeout']
+                ):
+                    raise TimeoutError
 
                 # this loop is constructed this way, rather than using alarm or
                 # something, to facilitate future features, e.g. pipe
@@ -221,7 +222,7 @@ class Supervisor(object):
             return
 
         if self.exit_status in self.error_exec_codes:
-            did_timeout = int(bool(self.exit_status is EXIT_STATUS_TIMEOUT))
+            did_timeout = int(self.exit_status is EXIT_STATUS_TIMEOUT)
             arg_str = self.options['error-exec']
             arg_str = arg_str.replace('{EXIT}', str(self.exit_status))
             arg_str = arg_str.replace('{TIMEOUT}', str(did_timeout))
@@ -256,12 +257,11 @@ def parse_opts(argv):
     except getopt.GetoptError as err:
         raise OptionError(str(err))
 
-    options = {}
-    for key, val in argopts:
-        if key in ['--timeout', '--delayrandom']:
-            options[key[2:]] = int(val)
-        else:
-            options[key[2:]] = val
+    options = {
+        key[2:]: int(val) if key in ['--timeout', '--delayrandom'] else val
+        for key, val in argopts
+    }
+
     return options, args
 
 

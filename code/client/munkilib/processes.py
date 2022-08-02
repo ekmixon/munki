@@ -38,33 +38,33 @@ def get_running_processes():
                             stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE)
     output = proc.communicate()[0].decode('UTF-8')
-    if proc.returncode == 0:
-        proc_list = [item for item in output.splitlines()
-                     if item.startswith('/')]
-        launchcfmapp = ('/System/Library/Frameworks/Carbon.framework'
-                        '/Versions/A/Support/LaunchCFMApp')
-        if launchcfmapp in proc_list:
-            # we have a really old Carbon app
-            proc = subprocess.Popen(['/bin/ps', '-axwwwo' 'args='],
-                                    shell=False, stdin=subprocess.PIPE,
-                                    stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE)
-            output = proc.communicate()[0].decode('UTF-8')
-            if proc.returncode == 0:
-                carbon_apps = [item[len(launchcfmapp)+1:]
-                               for item in output.splitlines()
-                               if item.startswith(launchcfmapp)]
-                if carbon_apps:
-                    proc_list.extend(carbon_apps)
-        return proc_list
-    else:
+    if proc.returncode != 0:
         return []
+    proc_list = [item for item in output.splitlines()
+                 if item.startswith('/')]
+    launchcfmapp = ('/System/Library/Frameworks/Carbon.framework'
+                    '/Versions/A/Support/LaunchCFMApp')
+    if launchcfmapp in proc_list:
+        # we have a really old Carbon app
+        proc = subprocess.Popen(['/bin/ps', '-axwwwo' 'args='],
+                                shell=False, stdin=subprocess.PIPE,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
+        output = proc.communicate()[0].decode('UTF-8')
+        if proc.returncode == 0:
+            if carbon_apps := [
+                item[len(launchcfmapp) + 1 :]
+                for item in output.splitlines()
+                if item.startswith(launchcfmapp)
+            ]:
+                proc_list.extend(carbon_apps)
+    return proc_list
 
 
 def is_app_running(appname):
     """Tries to determine if the application in appname is currently
     running"""
-    display.display_detail('Checking if %s is running...' % appname)
+    display.display_detail(f'Checking if {appname} is running...')
     proc_list = get_running_processes()
     matching_items = []
     if appname.startswith('/'):
@@ -73,21 +73,26 @@ def is_app_running(appname):
                           if item == appname]
     elif appname.endswith('.app'):
         # search by filename
-        matching_items = [item for item in proc_list
-                          if '/'+ appname + '/Contents/MacOS/' in item]
+        matching_items = [
+            item for item in proc_list if f'/{appname}/Contents/MacOS/' in item
+        ]
+
     else:
         # check executable name
-        matching_items = [item for item in proc_list
-                          if item.endswith('/' + appname)]
+        matching_items = [item for item in proc_list if item.endswith(f'/{appname}')]
     if not matching_items:
         # try adding '.app' to the name and check again
-        matching_items = [item for item in proc_list
-                          if '/'+ appname + '.app/Contents/MacOS/' in item]
+        matching_items = [
+            item
+            for item in proc_list
+            if f'/{appname}.app/Contents/MacOS/' in item
+        ]
+
 
     if matching_items:
         # it's running!
-        display.display_debug1('Matching process list: %s' % matching_items)
-        display.display_detail('%s is running!' % appname)
+        display.display_debug1(f'Matching process list: {matching_items}')
+        display.display_detail(f'{appname} is running!')
         return True
 
     # if we get here, we have no evidence that appname is running
@@ -108,13 +113,12 @@ def blocking_applications_running(pkginfoitem):
                     for item in pkginfoitem.get('installs', [])
                     if item.get('type') == 'application']
 
-    display.display_debug1("Checking for %s" % appnames)
-    running_apps = [appname for appname in appnames
-                    if is_app_running(appname)]
-    if running_apps:
-        display.display_detail(
-            "Blocking apps for %s are running:" % pkginfoitem['name'])
-        display.display_detail("    %s" % running_apps)
+    display.display_debug1(f"Checking for {appnames}")
+    if running_apps := [
+        appname for appname in appnames if is_app_running(appname)
+    ]:
+        display.display_detail(f"Blocking apps for {pkginfoitem['name']} are running:")
+        display.display_detail(f"    {running_apps}")
         return True
     return False
 
@@ -150,12 +154,10 @@ def find_processes(user=None, exe=None):
         for proc in lines:
             (p_pid, p_user, p_comm) = proc.split(None, 2)
 
-            if exe is not None:
-                if not p_comm.startswith(exe):
-                    continue
-            if user is not None:
-                if p_user != user:
-                    continue
+            if exe is not None and not p_comm.startswith(exe):
+                continue
+            if user is not None and p_user != user:
+                continue
             pids[int(p_pid)] = {
                 'user': p_user,
                 'exe': p_comm,
@@ -171,10 +173,7 @@ def force_logout_now():
     """Force the logout of interactive GUI users and spawn MSU."""
     try:
         procs = find_processes(exe=LOGINWINDOW)
-        users = {}
-        for pid in procs:
-            users[procs[pid]['user']] = pid
-
+        users = {procs[pid]['user']: pid for pid in procs}
         if 'root' in users:
             del users['root']
 
@@ -184,14 +183,14 @@ def force_logout_now():
 
         # kill loginwindows to cause logout of current users, whether
         # active or switched away via fast user switching.
-        for user in users:
+        for user, value in users.items():
             try:
-                os.kill(users[user], signal.SIGKILL)
+                os.kill(value, signal.SIGKILL)
             except OSError:
                 pass
 
     except BaseException as err:
-        display.display_error('Exception in force_logout_now(): %s' % str(err))
+        display.display_error(f'Exception in force_logout_now(): {str(err)}')
 
 
 # this function is maybe an odd fit for this module, but it's a way for the

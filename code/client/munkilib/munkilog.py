@@ -54,11 +54,12 @@ def log(msg, logname=''):
 
     # date/time format string
     formatstr = '%b %d %Y %H:%M:%S %z'
-    if not logname:
-        # use our regular logfile
-        logpath = prefs.pref('LogFile')
-    else:
-        logpath = os.path.join(os.path.dirname(prefs.pref('LogFile')), logname)
+    logpath = (
+        os.path.join(os.path.dirname(prefs.pref('LogFile')), logname)
+        if logname
+        else prefs.pref('LogFile')
+    )
+
     try:
         fileobj = codecs.open(logpath, mode='a', encoding='UTF-8')
         try:
@@ -94,23 +95,24 @@ def configure_syslog():
 
 def rotatelog(logname=''):
     """Rotate a log"""
-    if not logname:
-        # use our regular logfile
-        logpath = prefs.pref('LogFile')
-    else:
-        logpath = os.path.join(os.path.dirname(prefs.pref('LogFile')), logname)
+    logpath = (
+        os.path.join(os.path.dirname(prefs.pref('LogFile')), logname)
+        if logname
+        else prefs.pref('LogFile')
+    )
+
     if os.path.exists(logpath):
         for i in range(3, -1, -1):
             try:
-                os.unlink(logpath + '.' + str(i + 1))
+                os.unlink(f'{logpath}.{str(i + 1)}')
             except (OSError, IOError):
                 pass
             try:
-                os.rename(logpath + '.' + str(i), logpath + '.' + str(i + 1))
+                os.rename(f'{logpath}.{str(i)}', f'{logpath}.{str(i + 1)}')
             except (OSError, IOError):
                 pass
         try:
-            os.rename(logpath, logpath + '.0')
+            os.rename(logpath, f'{logpath}.0')
         except (OSError, IOError):
             pass
 
@@ -118,9 +120,8 @@ def rotatelog(logname=''):
 def rotate_main_log():
     """Rotate our main log"""
     main_log = prefs.pref('LogFile')
-    if os.path.exists(main_log):
-        if os.path.getsize(main_log) > 1000000:
-            rotatelog(main_log)
+    if os.path.exists(main_log) and os.path.getsize(main_log) > 1000000:
+        rotatelog(main_log)
 
 
 def reset_warnings():

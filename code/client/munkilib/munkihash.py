@@ -41,13 +41,12 @@ def gethash(filename, hash_function):
     if not os.path.isfile(filename):
         return 'NOT A FILE'
     try:
-        fileref = open(filename, 'rb')
-        while True:
-            chunk = fileref.read(2**16)
-            if not chunk:
-                break
-            hash_function.update(chunk)
-        fileref.close()
+        with open(filename, 'rb') as fileref:
+            while True:
+                if chunk := fileref.read(2**16):
+                    hash_function.update(chunk)
+                else:
+                    break
         return hash_function.hexdigest()
     except (OSError, IOError):
         return 'HASH_ERROR'

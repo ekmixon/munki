@@ -107,9 +107,7 @@ def findIconForApp(app_path):
     if not os.path.splitext(icon_path)[1]:
         # no file extension, so add '.icns'
         icon_path += '.icns'
-    if os.path.exists(icon_path):
-        return icon_path
-    return None
+    return icon_path if os.path.exists(icon_path) else None
 
 
 def extractAppBitsFromPkgArchive(archive_path, target_dir):
@@ -171,16 +169,15 @@ def extractAppIconsFromFlatPkg(pkg_path):
     cmd = ['/usr/sbin/pkgutil', '--expand', pkg_path, pkgtmp]
     result = subprocess.call(cmd)
     if result == 0:
-        for pkg in pkg_dict:
+        for pkg, value in pkg_dict.items():
             archive_path = os.path.join(pkgtmp, pkg, u'Payload')
             err = extractAppBitsFromPkgArchive(archive_path, exporttmp)
             if err == 0:
-                for info_path in pkg_dict[pkg]:
+                for info_path in value:
                     full_path = os.path.join(exporttmp, info_path)
                     # convert path to Info.plist to path to app
                     app_path = os.path.dirname(os.path.dirname(full_path))
-                    icon_path = findIconForApp(app_path)
-                    if icon_path:
+                    if icon_path := findIconForApp(app_path):
                         icon_paths.append(icon_path)
             else:
                 display.display_error(
@@ -204,8 +201,7 @@ def findInfoPlistPathsInBundlePkg(pkg_path, repo=None):
     else:
         bomfile = os.path.join(pkg_path, u'Contents/Archive.bom')
     if os.path.exists(bomfile):
-        info_paths = getAppInfoPathsFromBOM(bomfile)
-        if info_paths:
+        if info_paths := getAppInfoPathsFromBOM(bomfile):
             pkg_dict[pkg_path] = info_paths
     else:
         # mpkg or dist pkg; look for component pkgs within
@@ -228,7 +224,7 @@ def findInfoPlistPathsInBundlePkg(pkg_path, repo=None):
                 os.chdir(original_dir)
         for pkg in pkgs:
             full_path = os.path.join(pkg_contents_dir, pkg)
-            pkg_dict.update(findInfoPlistPathsInBundlePkg(full_path))
+            pkg_dict |= findInfoPlistPathsInBundlePkg(full_path)
     return pkg_dict
 
 
@@ -251,8 +247,7 @@ def extractAppIconsFromBundlePkg(pkg_path, repo=None):
             for info_path in pkg_dict[pkg]:
                 full_path = os.path.normpath(os.path.join(exporttmp, info_path))
                 app_path = os.path.dirname(os.path.dirname(full_path))
-                icon_path = findIconForApp(app_path)
-                if icon_path:
+                if icon_path := findIconForApp(app_path):
                     icon_paths.append(icon_path)
     return icon_paths
 

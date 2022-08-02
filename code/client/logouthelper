@@ -56,7 +56,7 @@ PROCESS_ID = 'com.googlecode.munki.logouthelper'
 
 def log(msg):
     '''Logs messages from this tool with an identifier'''
-    munkilog.log('%s: %s' % (PROCESS_ID, msg))
+    munkilog.log(f'{PROCESS_ID}: {msg}')
 
 
 def earliest_force_install_date():
@@ -77,8 +77,7 @@ def earliest_force_install_date():
     except FoundationPlist.NSPropertyListSerializationException:
         return None
 
-    for plist_name in installinfo_types:
-        key_to_check = installinfo_types[plist_name]
+    for plist_name, key_to_check in installinfo_types.items():
         plist_path = os.path.join(managed_install_dir, plist_name)
         try:
             installinfo = FoundationPlist.readPlist(plist_path)
@@ -86,9 +85,7 @@ def earliest_force_install_date():
             continue
 
         for install in installinfo.get(key_to_check, []):
-            force_install_date = install.get('force_install_after_date')
-
-            if force_install_date:
+            if force_install_date := install.get('force_install_after_date'):
                 force_install_date = info.subtract_tzoffset_from_date(
                     force_install_date)
                 if not earliest_date or force_install_date < earliest_date:
@@ -169,15 +166,11 @@ def main():
 
         if logout_time_override is None:
             logout_time = next_logout_time
-        else:
-            # allow the new next_logout_time from InstallInfo to be used
-            # if it has changed to a later time since when we decided to
-            # override it.
-            if next_logout_time > logout_time_override:
-                logout_time = next_logout_time
-                log('reset logout_time to: %s' % logout_time)
-                logout_time_override = None
-                sent_notifications = []
+        elif next_logout_time > logout_time_override:
+            logout_time = next_logout_time
+            log(f'reset logout_time to: {logout_time}')
+            logout_time_override = None
+            sent_notifications = []
 
         # always give at least MANDATORY_NOTIFICATIONS warnings
         if logout_time < minimum_notifications_logout_time:
@@ -189,7 +182,7 @@ def main():
                         % mandatory_notification)
                     logout_time = NSDate.date(
                         ).addTimeInterval_(60 * mandatory_notification + 30)
-                    log('reset logout_time to: %s' % logout_time)
+                    log(f'reset logout_time to: {logout_time}')
                     logout_time_override = logout_time
                     break
 
@@ -197,8 +190,7 @@ def main():
         info_dict = {'logout_time': logout_time}
         if minutes_until_logout in NOTIFICATION_MINS:
             sent_notifications.append(minutes_until_logout)
-            log('Warning user of %s minutes until forced logout'
-                % minutes_until_logout)
+            log(f'Warning user of {minutes_until_logout} minutes until forced logout')
             alert_user_of_forced_logout(info_dict)
         elif minutes_until_logout < 1:
             log('Forced logout in 60 seconds')

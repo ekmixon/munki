@@ -37,7 +37,7 @@ def _getsteps(num_of_steps, limit):
     """
     steps = []
     current = 0.0
-    for i in range(0, num_of_steps):
+    for i in range(num_of_steps):
         if i == num_of_steps-1:
             steps.append(int(round(limit)))
         else:
@@ -52,22 +52,22 @@ def display_percent_done(current, maximum):
     of Apple's tools (like softwareupdate), and tells
     MunkiStatus to display percent done via progress bar.
     """
-    if current >= maximum:
-        percentdone = 100
-    else:
-        percentdone = int(float(current)/float(maximum)*100)
     if munkistatusoutput:
+        percentdone = (
+            100
+            if current >= maximum
+            else int(float(current) / float(maximum) * 100)
+        )
+
         munkistatus.percent(str(percentdone))
 
     if verbose:
         step = _getsteps(16, maximum)
-        output = ''
         indicator = ['\t0', '.', '.', '20', '.', '.', '40', '.', '.',
                      '60', '.', '.', '80', '.', '.', '100\n']
-        for i in range(0, 16):
-            if current >= step[i]:
-                output += indicator[i]
-        if output:
+        if output := ''.join(
+            indicator[i] for i in range(16) if current >= step[i]
+        ):
             sys.stdout.write('\r' + output)
             sys.stdout.flush()
 
@@ -90,9 +90,8 @@ def _to_unicode(obj, encoding='UTF-8'):
     """Coerces obj to unicode"""
     # pylint: disable=basestring-builtin, unicode-builtin
     try:
-        if isinstance(obj, basestring):
-            if not isinstance(obj, unicode):
-                obj = unicode(obj, encoding)
+        if isinstance(obj, basestring) and not isinstance(obj, unicode):
+            obj = unicode(obj, encoding)
     except NameError:
         # Python 3
         if isinstance(obj, bytes):
@@ -112,8 +111,9 @@ def _concat_message(msg, *args):
             msg = msg % tuple(args)
         except TypeError as dummy_err:
             warnings.warn(
-                'String format does not match concat args: %s'
-                % (str(sys.exc_info())))
+                f'String format does not match concat args: {str(sys.exc_info())}'
+            )
+
     return msg.rstrip()
 
 
@@ -130,9 +130,9 @@ def display_status_major(msg, *args):
         munkistatus.percent(-1)
     if verbose:
         if msg.endswith('.') or msg.endswith(u'…'):
-            print('%s' % msg)
+            print(f'{msg}')
         else:
-            print('%s...' % msg)
+            print(f'{msg}...')
         sys.stdout.flush()
 
 
@@ -142,14 +142,14 @@ def display_status_minor(msg, *args):
     for verbose/non-verbose and munkistatus-style output.
     """
     msg = _concat_message(msg, *args)
-    munkilog.log(u'    ' + msg)
+    munkilog.log(f'    {msg}')
     if munkistatusoutput:
         munkistatus.detail(msg)
     if verbose:
         if msg.endswith('.') or msg.endswith(u'…'):
-            print('    %s' % msg)
+            print(f'    {msg}')
         else:
-            print('    %s...' % msg)
+            print(f'    {msg}...')
         sys.stdout.flush()
 
 
@@ -159,9 +159,9 @@ def display_info(msg, *args):
     Not displayed in MunkiStatus.
     """
     msg = _concat_message(msg, *args)
-    munkilog.log(u'    ' + msg)
+    munkilog.log(f'    {msg}')
     if verbose > 0:
-        print('    %s' % msg)
+        print(f'    {msg}')
         sys.stdout.flush()
 
 
@@ -174,10 +174,10 @@ def display_detail(msg, *args):
     """
     msg = _concat_message(msg, *args)
     if verbose > 1:
-        print('    %s' % msg)
+        print(f'    {msg}')
         sys.stdout.flush()
     if munkilog.logging_level() > 0:
-        munkilog.log(u'    ' + msg)
+        munkilog.log(f'    {msg}')
 
 
 def display_debug1(msg, *args):
@@ -186,10 +186,10 @@ def display_debug1(msg, *args):
     """
     msg = _concat_message(msg, *args)
     if verbose > 2:
-        print('    %s' % msg)
+        print(f'    {msg}')
         sys.stdout.flush()
     if munkilog.logging_level() > 1:
-        munkilog.log('DEBUG1: %s' % msg)
+        munkilog.log(f'DEBUG1: {msg}')
 
 
 def display_debug2(msg, *args):
@@ -198,9 +198,9 @@ def display_debug2(msg, *args):
     """
     msg = _concat_message(msg, *args)
     if verbose > 3:
-        print('    %s' % msg)
+        print(f'    {msg}')
     if munkilog.logging_level() > 2:
-        munkilog.log('DEBUG2: %s' % msg)
+        munkilog.log(f'DEBUG2: {msg}')
 
 
 def display_warning(msg, *args):
@@ -208,7 +208,7 @@ def display_warning(msg, *args):
     Prints warning msgs to stderr and the log
     """
     msg = _concat_message(msg, *args)
-    warning = 'WARNING: %s' % msg
+    warning = f'WARNING: {msg}'
     if verbose > 0:
         print(warning, file=sys.stderr)
     munkilog.log(warning)
@@ -217,7 +217,7 @@ def display_warning(msg, *args):
     # collect the warning for later reporting
     if 'Warnings' not in reports.report:
         reports.report['Warnings'] = []
-    reports.report['Warnings'].append('%s' % msg)
+    reports.report['Warnings'].append(f'{msg}')
 
 
 def display_error(msg, *args):
@@ -225,7 +225,7 @@ def display_error(msg, *args):
     Prints msg to stderr and the log
     """
     msg = _concat_message(msg, *args)
-    errmsg = 'ERROR: %s' % msg
+    errmsg = f'ERROR: {msg}'
     if verbose > 0:
         print(errmsg, file=sys.stderr)
     munkilog.log(errmsg)
@@ -234,7 +234,7 @@ def display_error(msg, *args):
     # collect the errors for later reporting
     if 'Errors' not in reports.report:
         reports.report['Errors'] = []
-    reports.report['Errors'].append('%s' % msg)
+    reports.report['Errors'].append(f'{msg}')
 
 
 # module globals

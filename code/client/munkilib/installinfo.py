@@ -100,9 +100,8 @@ def oldest_pending_update_in_days():
 def get_pending_update_info():
     '''Returns a dict with some data managedsoftwareupdate records at the end
     of a run'''
-    data = {}
     installinfo = get_installinfo()
-    data['install_count'] = len(installinfo.get('managed_installs', []))
+    data = {'install_count': len(installinfo.get('managed_installs', []))}
     data['removal_count'] = len(installinfo.get('removals', []))
     appleupdates = get_appleupdates()
     data['apple_update_count'] = len(appleupdates.get('AppleUpdates', []))
@@ -114,9 +113,7 @@ def get_pending_update_info():
     installs.extend(appleupdates.get('AppleUpdates', []))
     earliest_date = None
     for install in installs:
-        this_force_install_date = install.get('force_install_after_date')
-
-        if this_force_install_date:
+        if this_force_install_date := install.get('force_install_after_date'):
             try:
                 this_force_install_date = info.subtract_tzoffset_from_date(
                     this_force_install_date)
@@ -203,20 +200,18 @@ def save_pending_update_times():
         prior_pending_updates = {}
     current_pending_updates = {}
 
-    for category in update_names:
+    for category, value in update_names.items():
         current_pending_updates[category] = {}
-        for name in update_names[category]:
+        for name in value:
             if (category in prior_pending_updates and
                     name in prior_pending_updates[category]):
                 # copy the prior datetime from matching item
                 current_pending_updates[category][name] = prior_pending_updates[
                     category][name]
             else:
-                if category == 'AppleUpdates':
-                    current_pending_updates[category][name] = apple_updates[name]
-                else:
-                    # record new item with current datetime
-                    current_pending_updates[category][name] = now
+                current_pending_updates[category][name] = (
+                    apple_updates[name] if category == 'AppleUpdates' else now
+                )
 
     try:
         FoundationPlist.writePlist(current_pending_updates, pendingupdatespath)
@@ -231,8 +226,7 @@ def display_update_info():
     def display_and_record_restart_info(item):
         '''Displays logout/restart info for item if present and also updates
         our report'''
-        if (item.get('RestartAction') == 'RequireRestart' or
-                item.get('RestartAction') == 'RecommendRestart'):
+        if item.get('RestartAction') in ['RequireRestart', 'RecommendRestart']:
             display.display_info('       *Restart required')
             reports.report['RestartRequired'] = True
         if item.get('RestartAction') == 'RequireLogout':
@@ -297,8 +291,7 @@ def force_install_package_check():
     now_xhours = NSDate.dateWithTimeIntervalSinceNow_(
         FORCE_INSTALL_WARNING_HOURS * 3600)
 
-    for installinfo_plist in installinfo_types:
-        pl_dict = installinfo_types[installinfo_plist]
+    for installinfo_plist, pl_dict in installinfo_types.items():
         installinfopath = os.path.join(managed_install_dir, installinfo_plist)
         try:
             installinfo = FoundationPlist.readPlist(installinfopath)
@@ -324,8 +317,10 @@ def force_install_package_check():
                 if install.get('RestartAction'):
                     if install['RestartAction'] == 'RequireLogout':
                         result = 'logout'
-                    elif (install['RestartAction'] == 'RequireRestart' or
-                          install['RestartAction'] == 'RecommendRestart'):
+                    elif install['RestartAction'] in [
+                        'RequireRestart',
+                        'RecommendRestart',
+                    ]:
                         result = 'restart'
                 elif not install.get('unattended_install', False):
                     display.display_debug1(

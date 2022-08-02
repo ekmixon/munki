@@ -78,17 +78,11 @@ class AppUsageClient(object):
             request_string = writePlistToString(request)
             self.socket.send(request_string)
         except PlistWriteError as err:
-            return "ERROR:Bad request: %s" % err
+            return f"ERROR:Bad request: {err}"
         # use select so we don't hang indefinitely if appusaged dies
         ready = select.select([self.socket.fileno()], [], [], 2)
-        if ready[0]:
-            reply = self.socket.recv(8192).decode("UTF-8")
-        else:
-            reply = ''
-
-        if reply:
-            return reply.rstrip()
-        return "ERROR:No reply"
+        reply = self.socket.recv(8192).decode("UTF-8") if ready[0] else ''
+        return reply.rstrip() if reply else "ERROR:No reply"
 
     def disconnect(self):
         '''Disconnect from appusaged'''
@@ -100,7 +94,7 @@ class AppUsageClient(object):
             self.connect()
             result = self.send_request(request)
         except AppUsageClientError as err:
-            return "ERROR:%s" % err
+            return f"ERROR:{err}"
         finally:
             self.disconnect()
         return result
@@ -167,9 +161,9 @@ class NotificationHandler(NSObject):
                 if app_path:
                     bundle_id = os.path.basename(app_path)
             if app_path:
-                app_info_plist = NSDictionary.dictionaryWithContentsOfFile_(
-                    '%s/Contents/Info.plist' % app_path)
-                if app_info_plist:
+                if app_info_plist := NSDictionary.dictionaryWithContentsOfFile_(
+                    f'{app_path}/Contents/Info.plist'
+                ):
                     app_version = app_info_plist.get(
                         'CFBundleShortVersionString',
                         app_info_plist.get('CFBundleVersion', '0'))

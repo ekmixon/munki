@@ -76,15 +76,11 @@ def readPlist(filepath):
         NSPropertyListSerialization.
         propertyListFromData_mutabilityOption_format_errorDescription_(
             plistData, NSPropertyListMutableContainers, None, None))
-    if dataObject is None:
-        if error:
-            error = error.encode('ascii', 'ignore')
-        else:
-            error = "Unknown error"
-        errmsg = "%s in file %s" % (error, filepath)
-        raise NSPropertyListSerializationException(errmsg)
-    else:
+    if dataObject is not None:
         return dataObject
+    error = error.encode('ascii', 'ignore') if error else "Unknown error"
+    errmsg = f"{error} in file {filepath}"
+    raise NSPropertyListSerializationException(errmsg)
 
 
 def readPlistFromString(data):
@@ -97,14 +93,10 @@ def readPlistFromString(data):
         NSPropertyListSerialization.
         propertyListFromData_mutabilityOption_format_errorDescription_(
             plistData, NSPropertyListMutableContainers, None, None))
-    if dataObject is None:
-        if error:
-            error = error.encode('ascii', 'ignore')
-        else:
-            error = "Unknown error"
-        raise NSPropertyListSerializationException(error)
-    else:
+    if dataObject is not None:
         return dataObject
+    error = error.encode('ascii', 'ignore') if error else "Unknown error"
+    raise NSPropertyListSerializationException(error)
 
 
 def writePlist(dataObject, filepath):
@@ -116,17 +108,13 @@ def writePlist(dataObject, filepath):
         dataFromPropertyList_format_errorDescription_(
             dataObject, NSPropertyListXMLFormat_v1_0, None))
     if plistData is None:
-        if error:
-            error = error.encode('ascii', 'ignore')
-        else:
-            error = "Unknown error"
+        error = error.encode('ascii', 'ignore') if error else "Unknown error"
         raise NSPropertyListSerializationException(error)
     else:
         if plistData.writeToFile_atomically_(filepath, True):
             return
         else:
-            raise NSPropertyListWriteException(
-                "Failed to write plist data to %s" % filepath)
+            raise NSPropertyListWriteException(f"Failed to write plist data to {filepath}")
 
 
 def writePlistToString(rootObject):
@@ -135,14 +123,10 @@ def writePlistToString(rootObject):
         NSPropertyListSerialization.
         dataFromPropertyList_format_errorDescription_(
             rootObject, NSPropertyListXMLFormat_v1_0, None))
-    if plistData is None:
-        if error:
-            error = error.encode('ascii', 'ignore')
-        else:
-            error = "Unknown error"
-        raise NSPropertyListSerializationException(error)
-    else:
+    if plistData is not None:
         return bytes(plistData)
+    error = error.encode('ascii', 'ignore') if error else "Unknown error"
+    raise NSPropertyListSerializationException(error)
 
 
 if __name__ == '__main__':

@@ -48,7 +48,7 @@ from munkilib.wrappers import unicode_or_str
 
 def copy_icon_to_repo(repo, name, path):
     '''Copies png file in path to repo as icons/name.png'''
-    icon_ref = os.path.join(u'icons', name + u'.png')
+    icon_ref = os.path.join(u'icons', f'{name}.png')
     try:
         repo.put_from_local_file(icon_ref, path)
         print(u'\tWrote: %s' % icon_ref)
@@ -74,17 +74,15 @@ def generate_png_from_startosinstall_item(repo, install_item):
             file=sys.stderr
         )
         return
-    mountpoints = dmgutils.mountdmg(dmg_temp.path)
-    if mountpoints:
+    if mountpoints := dmgutils.mountdmg(dmg_temp.path):
         mountpoint = mountpoints[0]
-        app_path = osinstaller.find_install_macos_app(mountpoint)
-        if app_path:
-            icon_path = iconutils.findIconForApp(app_path)
-            if icon_path:
+        if app_path := osinstaller.find_install_macos_app(mountpoint):
+            if icon_path := iconutils.findIconForApp(app_path):
                 # use a local temp file to create our png
                 icon_temp = TempFile()
-                result = iconutils.convertIconToPNG(icon_path, icon_temp.path)
-                if result:
+                if result := iconutils.convertIconToPNG(
+                    icon_path, icon_temp.path
+                ):
                     copy_icon_to_repo(
                         repo, install_item['name'], icon_temp.path)
                 else:
@@ -111,19 +109,20 @@ def generate_png_from_dmg_item(repo, install_item):
         print(u'\tCan\'t download %s from repo: %s'
               % (dmg_ref, unicode_or_str(err)), file=sys.stderr)
         return
-    mountpoints = dmgutils.mountdmg(dmg_temp.path)
-    if mountpoints:
+    if mountpoints := dmgutils.mountdmg(dmg_temp.path):
         mountpoint = mountpoints[0]
-        apps = [item for item in install_item.get('items_to_copy', [])
-                if item.get('source_item', '').endswith('.app')]
-        if apps:
+        if apps := [
+            item
+            for item in install_item.get('items_to_copy', [])
+            if item.get('source_item', '').endswith('.app')
+        ]:
             app_path = os.path.join(mountpoint, apps[0]['source_item'])
-            icon_path = iconutils.findIconForApp(app_path)
-            if icon_path:
+            if icon_path := iconutils.findIconForApp(app_path):
                 # use a local temp file to create our png
                 icon_temp = TempFile()
-                result = iconutils.convertIconToPNG(icon_path, icon_temp.path)
-                if result:
+                if result := iconutils.convertIconToPNG(
+                    icon_path, icon_temp.path
+                ):
                     copy_icon_to_repo(
                         repo, install_item['name'], icon_temp.path)
                 else:
@@ -150,8 +149,7 @@ def generate_pngs_from_pkg(repo, install_item):
               % (item_path, unicode_or_str(err)), file=sys.stderr)
         return
     if pkgutils.hasValidDiskImageExt(item_path):
-        mountpoints = dmgutils.mountdmg(file_temp.path)
-        if mountpoints:
+        if mountpoints := dmgutils.mountdmg(file_temp.path):
             mountpoint = mountpoints[0]
             if install_item.get('package_path'):
                 pkg_path = os.path.join(
@@ -176,19 +174,15 @@ def generate_pngs_from_pkg(repo, install_item):
 
     if len(icon_paths) == 1:
         icon_temp = TempFile()
-        result = iconutils.convertIconToPNG(icon_paths[0], icon_temp.path)
-        if result:
+        if result := iconutils.convertIconToPNG(icon_paths[0], icon_temp.path):
             copy_icon_to_repo(
                 repo, install_item['name'], icon_temp.path)
     elif len(icon_paths) > 1:
-        index = 1
-        for icon_path in icon_paths:
+        for index, icon_path in enumerate(icon_paths, start=1):
             icon_name = install_item['name'] + '_' + str(index)
             icon_temp = TempFile()
-            result = iconutils.convertIconToPNG(icon_path, icon_temp.path)
-            if result:
+            if result := iconutils.convertIconToPNG(icon_path, icon_temp.path):
                 copy_icon_to_repo(repo, icon_name, icon_temp.path)
-            index += 1
     else:
         print(u'\tNo application icons found.')
 
@@ -201,8 +195,11 @@ def find_items_to_check(repo, itemlist=None):
         all_catalog_data = repo.get('catalogs/all')
         catalogitems = readPlistFromString(all_catalog_data)
     except (munkirepo.RepoError, FoundationPlistException) as err:
-        print('Error getting catalog data from repo: %s' % unicode_or_str(err),
-              file=sys.stderr)
+        print(
+            f'Error getting catalog data from repo: {unicode_or_str(err)}',
+            file=sys.stderr,
+        )
+
         return []
 
     itemdb = {}
@@ -215,10 +212,7 @@ def find_items_to_check(repo, itemlist=None):
         elif (pkgutils.MunkiLooseVersion(catalogitem['version'])
               > pkgutils.MunkiLooseVersion(itemdb[name]['version'])):
             itemdb[name] = catalogitem
-    pkg_list = []
-    for key in itemdb:
-        pkg_list.append(itemdb[key])
-    return pkg_list
+    return list(itemdb.values())
 
 
 def generate_pngs_from_munki_items(repo, force=False, itemlist=None):
@@ -229,12 +223,12 @@ def generate_pngs_from_munki_items(repo, force=False, itemlist=None):
     except munkirepo.RepoError:
         icons_list = []
     for item in itemlist:
-        print(u'Processing %s...' % item['name'])
+        print(f"Processing {item['name']}...")
         icon_name = item.get('icon_name') or item['name']
         if not os.path.splitext(icon_name)[1]:
             icon_name += u'.png'
         if icon_name in icons_list and not force:
-            print(u'Found existing icon at %s' % icon_name)
+            print(f'Found existing icon at {icon_name}')
             continue
         installer_type = item.get('installer_type')
         if installer_type == 'copy_from_dmg':
@@ -265,10 +259,7 @@ def main():
     options, arguments = parser.parse_args()
 
     # Make sure we have a path to work with
-    if arguments:
-        repo_path = arguments[0].rstrip("/")
-    else:
-        repo_path = pref('repo_path')
+    repo_path = arguments[0].rstrip("/") if arguments else pref('repo_path')
     if not options.repo_url and repo_path:
         options.repo_url = path2url(repo_path)
 
@@ -279,8 +270,11 @@ def main():
     try:
         repo = munkirepo.connect(options.repo_url, options.plugin)
     except munkirepo.RepoError as err:
-        print(u'Could not connect to munki repo: %s' % unicode_or_str(err),
-              file=sys.stderr)
+        print(
+            f'Could not connect to munki repo: {unicode_or_str(err)}',
+            file=sys.stderr,
+        )
+
         exit(-1)
 
     # generate icons!

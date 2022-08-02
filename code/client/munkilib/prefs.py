@@ -115,8 +115,7 @@ class Preferences(object):
         keys = CFPreferencesCopyKeyList(
             self.bundle_id, self.user, kCFPreferencesCurrentHost)
         if keys is not None:
-            for i in keys:
-                yield i
+            yield from keys
 
     def __contains__(self, pref_name):
         """Since this uses CFPreferencesCopyAppValue, it will find a preference
@@ -143,13 +142,11 @@ class Preferences(object):
 
     def __repr__(self):
         """Return a text representation of the class"""
-        return '<%s %s>' % (self.__class__.__name__, self.bundle_id)
+        return f'<{self.__class__.__name__} {self.bundle_id}>'
 
     def get(self, pref_name, default=None):
         """Return a preference or the default value"""
-        if not pref_name in self:
-            return default
-        return self.__getitem__(pref_name)
+        return default if pref_name not in self else self.__getitem__(pref_name)
 
 
 class ManagedInstallsPreferences(Preferences):
@@ -235,64 +232,77 @@ def get_config_level(domain, pref_name, value):
         return '[MANAGED]'
     # define all the places we need to search, in priority order
     levels = [
-        {'file': ('/var/root/Library/Preferences/ByHost/'
-                  '%s.xxxx.plist' % domain),
-         'domain': domain,
-         'user': kCFPreferencesCurrentUser,
-         'host': kCFPreferencesCurrentHost
+        {
+            'file': (
+                '/var/root/Library/Preferences/ByHost/'
+                '%s.xxxx.plist' % domain
+            ),
+            'domain': domain,
+            'user': kCFPreferencesCurrentUser,
+            'host': kCFPreferencesCurrentHost,
         },
-        {'file': '/var/root/Library/Preferences/%s.plist' % domain,
-         'domain': domain,
-         'user': kCFPreferencesCurrentUser,
-         'host': kCFPreferencesAnyHost
+        {
+            'file': f'/var/root/Library/Preferences/{domain}.plist',
+            'domain': domain,
+            'user': kCFPreferencesCurrentUser,
+            'host': kCFPreferencesAnyHost,
         },
-        {'file': ('/var/root/Library/Preferences/ByHost/'
-                  '.GlobalPreferences.xxxx.plist'),
-         'domain': '.GlobalPreferences',
-         'user': kCFPreferencesCurrentUser,
-         'host': kCFPreferencesCurrentHost
+        {
+            'file': (
+                '/var/root/Library/Preferences/ByHost/'
+                '.GlobalPreferences.xxxx.plist'
+            ),
+            'domain': '.GlobalPreferences',
+            'user': kCFPreferencesCurrentUser,
+            'host': kCFPreferencesCurrentHost,
         },
-        {'file': '/var/root/Library/Preferences/.GlobalPreferences.plist',
-         'domain': '.GlobalPreferences',
-         'user': kCFPreferencesCurrentUser,
-         'host': kCFPreferencesAnyHost
+        {
+            'file': '/var/root/Library/Preferences/.GlobalPreferences.plist',
+            'domain': '.GlobalPreferences',
+            'user': kCFPreferencesCurrentUser,
+            'host': kCFPreferencesAnyHost,
         },
-        {'file': '/Library/Preferences/%s.plist' % domain,
-         'domain': domain,
-         'user': kCFPreferencesAnyUser,
-         'host': kCFPreferencesCurrentHost
+        {
+            'file': f'/Library/Preferences/{domain}.plist',
+            'domain': domain,
+            'user': kCFPreferencesAnyUser,
+            'host': kCFPreferencesCurrentHost,
         },
-        {'file': '/Library/Preferences/.GlobalPreferences.plist',
-         'domain': '.GlobalPreferences',
-         'user': kCFPreferencesAnyUser,
-         'host': kCFPreferencesCurrentHost
+        {
+            'file': '/Library/Preferences/.GlobalPreferences.plist',
+            'domain': '.GlobalPreferences',
+            'user': kCFPreferencesAnyUser,
+            'host': kCFPreferencesCurrentHost,
         },
     ]
+
     for level in levels:
         if (value == CFPreferencesCopyValue(
                 pref_name, level['domain'], level['user'], level['host'])):
-            return '[%s]' % level['file']
-    if value == DEFAULT_PREFS.get(pref_name):
-        return '[default]'
-    return '[unknown]'
+            return f"[{level['file']}]"
+    return '[default]' if value == DEFAULT_PREFS.get(pref_name) else '[unknown]'
 
 
 def print_config():
     '''Prints the current Munki configuration'''
     print('Current Munki configuration:')
-    max_pref_name_len = max([len(pref_name) for pref_name in DEFAULT_PREFS])
+    max_pref_name_len = max(len(pref_name) for pref_name in DEFAULT_PREFS)
     for pref_name in sorted(DEFAULT_PREFS):
         if pref_name == 'LastNotifiedDate':
             # skip it
             continue
-        else:
-            value = pref(pref_name)
-            where = get_config_level(BUNDLE_ID, pref_name, value)
+        value = pref(pref_name)
+        where = get_config_level(BUNDLE_ID, pref_name, value)
         repr_value = value
         if is_a_string(value):
             repr_value = repr(value)
-        print(('%' + str(max_pref_name_len) + 's: %5s %s ') % (
-            pref_name, repr_value, where))
+        print(
+            (
+                f'%{str(max_pref_name_len)}s: %5s %s '
+                % (pref_name, repr_value, where)
+            )
+        )
+
     # also print com.apple.SoftwareUpdate CatalogURL config if
     # Munki is configured to install Apple updates
     if pref('InstallAppleSoftwareUpdates'):
@@ -304,8 +314,12 @@ def print_config():
         repr_value = value
         if is_a_string(value):
             repr_value = repr(value)
-        print(('%' + str(max_pref_name_len) + 's: %5s %s ') % (
-            pref_name, repr_value, where))
+        print(
+            (
+                f'%{str(max_pref_name_len)}s: %5s %s '
+                % (pref_name, repr_value, where)
+            )
+        )
 
 
 if __name__ == '__main__':

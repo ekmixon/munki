@@ -69,8 +69,7 @@ def get_firmware_alert_text(dom):
                 break
     if type_is_firmware:
         firmware_alert_text = '_DEFAULT_FIRMWARE_ALERT_TEXT_'
-        readmes = dom.getElementsByTagName('readme')
-        if readmes:
+        if readmes := dom.getElementsByTagName('readme'):
             html = readmes[0].firstChild.data
             try:
                 html_data = buffer(html.encode('utf-8'))
@@ -114,7 +113,7 @@ def get_blocking_apps_from_dom(dom):
             executable = pkgutils.getAppBundleExecutable(pathname)
             if executable:
                 # path to executable should be location agnostic
-                executable = executable[len(dirname + '/'):]
+                executable = executable[len(f'{dirname}/'):]
             blocking_apps.append(executable or pathname)
     return blocking_apps
 
@@ -122,10 +121,8 @@ def get_blocking_apps_from_dom(dom):
 def get_localization_strings(dom):
     '''Returns localization strings'''
     strings_data = {}
-    localizations = dom.getElementsByTagName('localization')
-    if localizations:
-        string_elements = localizations[0].getElementsByTagName('strings')
-        if string_elements:
+    if localizations := dom.getElementsByTagName('localization'):
+        if string_elements := localizations[0].getElementsByTagName('strings'):
             strings = string_elements[0]
             if strings.firstChild:
                 try:
@@ -143,16 +140,15 @@ def populate_pkgs_from_pkg_refs(dom, pkgs):
     '''Uses pkg-ref elements in the dom to populate data in the pkgs dict'''
     dom_pkg_refs = dom.getElementsByTagName('pkg-ref') or []
     for pkg_ref in dom_pkg_refs:
-        if not 'id' in list(pkg_ref.attributes.keys()):
+        if 'id' not in list(pkg_ref.attributes.keys()):
             continue
         pkg_id = pkg_ref.attributes['id'].value
-        if not pkg_id in list(pkgs.keys()):
+        if pkg_id not in list(pkgs.keys()):
             # this pkg_id was not in our choice list
             continue
         if pkg_ref.firstChild:
             try:
-                pkg_name = pkg_ref.firstChild.wholeText
-                if pkg_name:
+                if pkg_name := pkg_ref.firstChild.wholeText:
                     pkgs[pkg_id]['name'] = pkg_name
             except AttributeError:
                 pass
@@ -190,7 +186,7 @@ def get_su_choice_and_pkgs(dom):
     choice_elements = dom.getElementsByTagName('choice') or []
     for choice in choice_elements:
         keys = list(choice.attributes.keys())
-        if not 'id' in keys:
+        if 'id' not in keys:
             continue
         choice_id = choice.attributes['id'].value
         if choice_id == su_choice_id_key:
@@ -201,7 +197,7 @@ def get_su_choice_and_pkgs(dom):
             for pkg in choice_pkg_refs:
                 if 'id' in list(pkg.attributes.keys()):
                     pkg_id = pkg.attributes['id'].value
-                    if not pkg_id in list(pkgs.keys()):
+                    if pkg_id not in list(pkgs.keys()):
                         pkgs[pkg_id] = {}
 
     # now look through all pkg-refs in dom so we can assemble all
@@ -236,19 +232,16 @@ def parse_su_dist(filename):
     firmware_alert_text = get_firmware_alert_text(dom)
 
     # assemble!
-    info = {}
-    info['name'] = su_choice.get('suDisabledGroupID', '')
+    info = {'name': su_choice.get('suDisabledGroupID', '')}
     info['display_name'] = su_choice.get('title', '')
     info['apple_product_name'] = info['display_name']
     info['version_to_install'] = su_choice.get('versStr', '')
     info['description'] = su_choice.get('description', '')
-    for key in info:
-        if info[key].startswith('SU_'):
+    for key, value in info.items():
+        if value.startswith('SU_'):
             # get value from strings_data dictionary
             info[key] = strings_data.get(info[key], info[key])
-    installed_size = 0
-    for pkg in pkgs.values():
-        installed_size += pkg.get('installed_size', 0)
+    installed_size = sum(pkg.get('installed_size', 0) for pkg in pkgs.values())
     info['installed_size'] = installed_size
     if blocking_apps:
         info['blocking_applications'] = blocking_apps

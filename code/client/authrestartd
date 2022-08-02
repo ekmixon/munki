@@ -73,8 +73,8 @@ class FDEUtil(object):
         '''Make sure copy request has everything we need'''
         self.log.debug('Verifying request')
         for key in ['task']:
-            if not key in self.request:
-                raise FDEUtilError('No %s in request' % key)
+            if key not in self.request:
+                raise FDEUtilError(f'No {key} in request')
 
     def store_password(self, password, username=None):
         '''Stores a password for later use for authrestart'''
@@ -197,7 +197,7 @@ class RunHandler(SocketServer.StreamRequestHandler):
         '''Verify the basic syntax of request plist.'''
         # pylint: disable=no-self-use
         # Keep a list of error messages.
-        errors = list()
+        errors = []
 
         # Root should be a dictionary.
         if not isinstance(plist, dict):
@@ -230,10 +230,6 @@ class RunHandler(SocketServer.StreamRequestHandler):
         NGROUPS = 16
         # pylint: enable=invalid-name
         cr_version = 0
-        cr_uid = 1
-        cr_ngroups = 2
-        cr_groups = 3
-
         xucred_fmt = b'IIh%dI' % NGROUPS
         res = struct.unpack(
             xucred_fmt,
@@ -242,6 +238,10 @@ class RunHandler(SocketServer.StreamRequestHandler):
 
         if res[cr_version] != XUCRED_VERSION:
             raise OSError('Incompatible struct xucred version')
+
+        cr_uid = 1
+        cr_ngroups = 2
+        cr_groups = 3
 
         return res[cr_uid], res[cr_groups:cr_groups + res[cr_ngroups]]
 
@@ -297,9 +297,8 @@ class RunHandler(SocketServer.StreamRequestHandler):
                 #    (u'ERROR:%s\n' % unicode_or_str(err)).encode('UTF-8'))
 
         except Exception as err:
-            self.log.error('Caught exception: %s' % repr(err))
-            self.request.send(
-                (u'ERROR:Caught exception: %s' % repr(err)).encode('UTF-8'))
+            self.log.error(f'Caught exception: {repr(err)}')
+            self.request.send(f'ERROR:Caught exception: {repr(err)}'.encode('UTF-8'))
             raise
 
 
@@ -341,7 +340,9 @@ class RestartHelperDaemon(SocketServer.UnixStreamServer):
             log_console.setLevel(logging.DEBUG)
             # store the log in the same directory as ManagedSoftwareUpdate.log
             logfilepath = os.path.join(
-                os.path.dirname(prefs.pref('LogFile')), APPNAME + '.log')
+                os.path.dirname(prefs.pref('LogFile')), f'{APPNAME}.log'
+            )
+
             log_file = logging.handlers.RotatingFileHandler(
                 logfilepath, 'a', 100000, 9, 'utf-8')
             log_file.setLevel(logging.DEBUG)
@@ -368,7 +369,7 @@ def main():
     '''Start our daemon, connect to socket and process requests'''
     # Make sure we're launched as root
     if os.geteuid() != 0:
-        print('%s must be run as root.' % APPNAME, file=sys.stderr)
+        print(f'{APPNAME} must be run as root.', file=sys.stderr)
         # Sleep to avoid respawn.
         time.sleep(10)
         return 1
@@ -384,11 +385,10 @@ def main():
     while True:
         info = os.stat(exepath)
         if info.st_uid != root_uid:
-            print('%s must be owned by root.' % exepath, file=sys.stderr)
+            print(f'{exepath} must be owned by root.', file=sys.stderr)
             path_ok = False
         if info.st_gid not in (wheel_gid, admin_gid):
-            print('%s must have group wheel or admin.' % exepath,
-                  file=sys.stderr)
+            print(f'{exepath} must have group wheel or admin.', file=sys.stderr)
             path_ok = False
         if info.st_mode & stat.S_IWOTH:
             print('%s mustn\'t be world writeable.' % exepath, file=sys.stderr)

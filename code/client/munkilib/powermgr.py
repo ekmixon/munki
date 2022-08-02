@@ -93,9 +93,7 @@ def assertNoIdleSleep(reason=None):
         kIOPMAssertionLevelOn,
         reason, None)
     # pylint: enable=undefined-variable
-    if errcode:
-        return None
-    return assertID
+    return None if errcode else assertID
 
 
 def removeNoIdleSleepAssertion(assertion_id):

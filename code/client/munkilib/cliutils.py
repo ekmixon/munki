@@ -20,6 +20,7 @@ Created by Greg Neagle on 2017-03-12.
 
 Functions supporting the admin command-line tools
 """
+
 from __future__ import absolute_import, print_function
 
 import ctypes
@@ -66,7 +67,7 @@ except ImportError:
     FOUNDATION_SUPPORT = False
 
 BUNDLE_ID = 'com.googlecode.munki.munkiimport'
-PREFSNAME = BUNDLE_ID + '.plist'
+PREFSNAME = f'{BUNDLE_ID}.plist'
 PREFSPATH = os.path.expanduser(os.path.join('~/Library/Preferences', PREFSNAME))
 
 if FOUNDATION_SUPPORT:
@@ -93,10 +94,7 @@ else:
                 pref.cache = plistlib.readPlist(PREFSPATH)
             except (IOError, OSError, ExpatError):
                 pref.cache = {}
-        if prefname in pref.cache:
-            return pref.cache[prefname]
-        # no pref found
-        return None
+        return pref.cache[prefname] if prefname in pref.cache else None
 
 
 def get_version():
@@ -120,7 +118,7 @@ def get_version():
             except KeyError:
                 pass
     if build:
-        vers = vers + "." + build
+        vers = f"{vers}.{build}"
     return vers
 
 
@@ -175,7 +173,7 @@ def get_input_with_default(prompt, default_text):
     darwin_vers = int(os.uname()[2].split('.')[0])
     if darwin_vers == 10:
         if default_text:
-            prompt = '%s [%s]: ' % (prompt.rstrip(': '), default_text)
+            prompt = f"{prompt.rstrip(': ')} [{default_text}]: "
             return (unicode_or_str(get_input(prompt), encoding=sys.stdin.encoding) or
                     unicode_or_str(default_text))
         # no default value, just call raw_input
@@ -254,8 +252,7 @@ def configure(prompt_list):
                 del existing_prefs['repo_path']
             plistlib.writePlist(existing_prefs, PREFSPATH)
         except (IOError, OSError, ExpatError):
-            print('Could not save configuration to %s' % PREFSPATH,
-                  file=sys.stderr)
+            print(f'Could not save configuration to {PREFSPATH}', file=sys.stderr)
             raise ConfigurationSaveError
 
 

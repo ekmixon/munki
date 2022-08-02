@@ -17,6 +17,7 @@
 """
 managedsoftwareupdate
 """
+
 from __future__ import absolute_import, print_function
 
 import optparse
@@ -53,7 +54,7 @@ except ImportError:
     except utils.ScriptNotFoundError:
         pass  # script is not required, so pass
     except utils.RunExternalScriptError as err:
-        print(str(err), file=sys.stderr)
+        print(err, file=sys.stderr)
     sys.exit(200)
 else:
     from munkilib import appleupdates
@@ -99,11 +100,10 @@ def getIdleSeconds():
     idle_time = 0
     regex = re.compile(r'"?HIDIdleTime"?\s+=\s+(\d+)')
     for line in ioreglines:
-        idle_re = regex.search(line)
-        if idle_re:
-            idle_time = idle_re.group(1)
+        if idle_re := regex.search(line):
+            idle_time = idle_re[1]
             break
-    return int(int(idle_time)/1000000000) # pylint: disable=old-division
+    return int(idle_time) // 1000000000
 
 
 def networkUp():
@@ -122,7 +122,7 @@ def networkUp():
         if 'inet' in line:
             parts = line.split()
             addr = parts[1]
-            if not addr in ['127.0.0.1', '0.0.0.0']:
+            if addr not in ['127.0.0.1', '0.0.0.0']:
                 return True
     return False
 
@@ -153,7 +153,7 @@ def createDirsIfNeeded(dirlist):
             try:
                 os.mkdir(directory)
             except (OSError, IOError):
-                print('ERROR: Could not create %s' % directory, file=sys.stderr)
+                print(f'ERROR: Could not create {directory}', file=sys.stderr)
                 return False
 
     return True
@@ -185,7 +185,7 @@ def runScript(script, display_name, runtype):
     script file are weaker than the current executable."""
     result = 0
     if os.path.exists(script):
-        display.display_status_minor('Performing %s tasks...' % display_name)
+        display.display_status_minor(f'Performing {display_name} tasks...')
     else:
         return result
 
@@ -216,9 +216,9 @@ def runScript(script, display_name, runtype):
             display.display_info(
                 '%s return code: %d' % (display_name, result))
         if stdout:
-            display.display_info('%s stdout: %s' % (display_name, stdout))
+            display.display_info(f'{display_name} stdout: {stdout}')
         if stderr:
-            display.display_info('%s stderr: %s' % (display_name, stderr))
+            display.display_info(f'{display_name} stderr: {stderr}')
     except utils.ScriptNotFoundError:
         pass  # script is not required, so pass
     except utils.RunExternalScriptError as err:
@@ -351,8 +351,7 @@ def doFinishingTasks(runtype=None):
 def startLogoutHelper():
     """Handle the need for a forced logout. Start our logouthelper"""
     cmd = ['/bin/launchctl', 'start', 'com.googlecode.munki.logouthelper']
-    result = subprocess.call(cmd)
-    if result:
+    if result := subprocess.call(cmd):
         # some problem with the launchd job
         display.display_error(
             'Could not start com.googlecode.munki.logouthelper')
@@ -384,23 +383,22 @@ def doRestart(shutdown=False):
             authrestart.do_authorized_or_normal_restart(shutdown=shutdown)
         elif not authrestartd.restart():
             authrestart.do_authorized_or_normal_restart()
+    elif display.munkistatusoutput:
+        # someone is logged in and we're using Managed Software Center.
+        # We need to notify the active user that a restart is required.
+        # We actually should almost never get here; generally Munki knows
+        # a restart is needed before even starting the updates and forces
+        # a logout before applying the updates
+        display.display_info(
+            'Notifying currently logged-in user to restart.')
+        munkistatus.activate()
+        munkistatus.restartAlert()
+        # Managed Software Center will trigger a restart
+        # when the alert is dismissed. If a user gets clever and subverts
+        # this restart (perhaps by force-quitting the app),
+        # that's their problem...
     else:
-        if display.munkistatusoutput:
-            # someone is logged in and we're using Managed Software Center.
-            # We need to notify the active user that a restart is required.
-            # We actually should almost never get here; generally Munki knows
-            # a restart is needed before even starting the updates and forces
-            # a logout before applying the updates
-            display.display_info(
-                'Notifying currently logged-in user to restart.')
-            munkistatus.activate()
-            munkistatus.restartAlert()
-            # Managed Software Center will trigger a restart
-            # when the alert is dismissed. If a user gets clever and subverts
-            # this restart (perhaps by force-quitting the app),
-            # that's their problem...
-        else:
-            print('Please restart immediately.')
+        print('Please restart immediately.')
 
 
 def munkiUpdatesAvailable():
@@ -415,8 +413,7 @@ def munkiUpdatesAvailable():
                                 len(plist.get('managed_installs', [])))
         except (AttributeError,
                 FoundationPlist.NSPropertyListSerializationException):
-            display.display_error(
-                'Install info at %s is invalid.' % install_info)
+            display.display_error(f'Install info at {install_info} is invalid.')
     return updatesavailable
 
 
@@ -428,8 +425,7 @@ def munkiUpdatesContainStartOSInstallItem():
         try:
             plist = FoundationPlist.readPlist(install_info)
         except FoundationPlist.NSPropertyListSerializationException:
-            display.display_error(
-                'Install info at %s is invalid.' % install_info)
+            display.display_error(f'Install info at {install_info} is invalid.')
         else:
             # check managed_installs for startosinstall items
             for item in plist.get('managed_installs', []):
@@ -446,8 +442,7 @@ def munkiUpdatesContainAppleItems():
         try:
             plist = FoundationPlist.readPlist(install_info)
         except FoundationPlist.NSPropertyListSerializationException:
-            display.display_error(
-                'Install info at %s is invalid.' % install_info)
+            display.display_error(f'Install info at {install_info} is invalid.')
         else:
             # check managed_installs
             for item in plist.get('managed_installs', []):
@@ -530,8 +525,9 @@ def notifyUserOfUpdates(force=False):
             prefs.pref('DaysBetweenNotifications'))
     except ValueError:
         display.display_warning(
-            'DaysBetweenNotifications is not an integer: %s'
-            % prefs.pref('DaysBetweenNotifications'))
+            f"DaysBetweenNotifications is not an integer: {prefs.pref('DaysBetweenNotifications')}"
+        )
+
         # continue with the default DaysBetweenNotifications
         daysBetweenNotifications = 1
     now = NSDate.new()
@@ -550,7 +546,7 @@ def notifyUserOfUpdates(force=False):
         prefs.set_pref('LastNotifiedDate', now)
 
         munkilog.log('Notifying user of available updates.')
-        munkilog.log('LastNotifiedDate was %s' % lastNotifiedString)
+        munkilog.log(f'LastNotifiedDate was {lastNotifiedString}')
 
         # notify user of available updates using LaunchAgent to launch
         # munki-notifier.app in the user context.

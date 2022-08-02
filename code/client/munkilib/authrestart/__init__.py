@@ -90,13 +90,7 @@ def is_fv_user(username):
             cmd, stderr=subprocess.STDOUT).decode('UTF-8')
     except subprocess.CalledProcessError:
         return False
-    # output is in the format
-    # jsmith,911D2742-7983-436D-9FA3-3F6B7421684B
-    # tstark,5B0EBEE6-0917-47B2-BFF3-78A9DE437D65
-    for line in userlist.splitlines():
-        if line.split(',')[0] == username:
-            return True
-    return False
+    return any(line.split(',')[0] == username for line in userlist.splitlines())
 
 
 def can_attempt_auth_restart_for(username):
@@ -124,8 +118,7 @@ def get_auth_restart_key(quiet=False):
     # try to get the recovery key from the defined location
     try:
         keyplist = FoundationPlist.readPlist(recoverykeyplist)
-        recovery_key = keyplist['RecoveryKey'].strip()
-        return recovery_key
+        return keyplist['RecoveryKey'].strip()
     except FoundationPlist.NSPropertyListSerializationException:
         if not quiet:
             display.display_error(
@@ -208,20 +201,21 @@ def do_authorized_or_normal_restart(username=None,
         return
     display.display_info('Restarting now.')
     os_version_tuple = osutils.getOsVersion(as_tuple=True)
-    if (prefs.pref('PerformAuthRestarts') and
-            (prefs.pref('RecoveryKeyFile') or password) and
-            os_version_tuple >= (10, 8)):
-        if filevault_is_active():
-            display.display_debug1('Configured to perform AuthRestarts...')
-            # try to perform an auth restart
-            if not perform_auth_restart(username=username, password=password):
-                # if we got to here then the auth restart failed
-                # notify that it did then perform a normal restart
-                display.display_warning(
-                    'Authorized Restart failed. Performing normal restart...')
-            else:
-                # we triggered an authrestart
-                return
+    if (
+        prefs.pref('PerformAuthRestarts')
+        and (prefs.pref('RecoveryKeyFile') or password)
+        and os_version_tuple >= (10, 8)
+    ) and filevault_is_active():
+        display.display_debug1('Configured to perform AuthRestarts...')
+        # try to perform an auth restart
+        if not perform_auth_restart(username=username, password=password):
+            # if we got to here then the auth restart failed
+            # notify that it did then perform a normal restart
+            display.display_warning(
+                'Authorized Restart failed. Performing normal restart...')
+        else:
+            # we triggered an authrestart
+            return
     # fall back to normal restart
     display.display_debug1('Performing a regular restart...')
     dummy_retcode = subprocess.call(['/sbin/shutdown', '-r', 'now'])

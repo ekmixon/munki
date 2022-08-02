@@ -36,11 +36,10 @@ def _writefile(stringdata, path):
     '''Writes string data to path.
     Returns the path on success, empty string on failure.'''
     try:
-        fileobject = open(path, mode='wb')
-        # write line-by-line to ensure proper UNIX line-endings
-        for line in stringdata.splitlines():
-            fileobject.write(line.encode('UTF-8') + b"\n")
-        fileobject.close()
+        with open(path, mode='wb') as fileobject:
+            # write line-by-line to ensure proper UNIX line-endings
+            for line in stringdata.splitlines():
+                fileobject.write(line.encode('UTF-8') + b"\n")
         return path
     except (OSError, IOError):
         display.display_error("Couldn't write %s" % stringdata)
@@ -55,23 +54,21 @@ def run_embedded_script(scriptname, pkginfo_item, suppress_error=False):
     script_text = pkginfo_item.get(scriptname)
     itemname = pkginfo_item.get('name')
     if not script_text:
-        display.display_error(
-            'Missing script %s for %s' % (scriptname, itemname))
+        display.display_error(f'Missing script {scriptname} for {itemname}')
         return -1
 
     # write the script to a temp file
     scriptpath = os.path.join(osutils.tmpdir(), scriptname)
     if _writefile(script_text, scriptpath):
         cmd = ['/bin/chmod', '-R', 'o+x', scriptpath]
-        retcode = subprocess.call(cmd)
-        if retcode:
+        if retcode := subprocess.call(cmd):
             display.display_error(
-                'Error setting script mode in %s for %s'
-                % (scriptname, itemname))
+                f'Error setting script mode in {scriptname} for {itemname}'
+            )
+
             return -1
     else:
-        display.display_error(
-            'Cannot write script %s for %s' % (scriptname, itemname))
+        display.display_error(f'Cannot write script {scriptname} for {itemname}')
         return -1
 
     # now run the script
@@ -82,11 +79,9 @@ def run_embedded_script(scriptname, pkginfo_item, suppress_error=False):
 def run_script(itemname, path, scriptname, suppress_error=False):
     '''Runs a script, Returns return code.'''
     if suppress_error:
-        display.display_detail(
-            'Running %s for %s ' % (scriptname, itemname))
+        display.display_detail(f'Running {scriptname} for {itemname} ')
     else:
-        display.display_status_minor(
-            'Running %s for %s ' % (scriptname, itemname))
+        display.display_status_minor(f'Running {scriptname} for {itemname} ')
     if display.munkistatusoutput:
         # set indeterminate progress bar
         munkistatus.percent(-1)
@@ -98,8 +93,7 @@ def run_script(itemname, path, scriptname, suppress_error=False):
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT)
     except OSError as err:
-        display.display_error(
-            'Error executing script %s: %s' % (scriptname, str(err)))
+        display.display_error(f'Error executing script {scriptname}: {str(err)}')
         return -1
 
     while True:
@@ -114,15 +108,13 @@ def run_script(itemname, path, scriptname, suppress_error=False):
 
     retcode = proc.poll()
     if retcode and not suppress_error:
-        display.display_error(
-            'Running %s for %s failed.' % (scriptname, itemname))
+        display.display_error(f'Running {scriptname} for {itemname} failed.')
         display.display_error("-"*78)
         for line in scriptoutput:
             display.display_error("\t%s" % line.rstrip("\n"))
         display.display_error("-"*78)
     elif not suppress_error:
-        munkilog.log(
-            'Running %s for %s was successful.' % (scriptname, itemname))
+        munkilog.log(f'Running {scriptname} for {itemname} was successful.')
 
     if display.munkistatusoutput:
         # clear indeterminate progress bar

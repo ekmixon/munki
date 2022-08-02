@@ -57,8 +57,8 @@ def make_dmg(pkgpath):
     Returns path to newly-created disk image."""
 
     pkgname = os.path.basename(pkgpath)
-    print('Making disk image containing %s...' % pkgname)
-    diskimagename = os.path.splitext(pkgname)[0] + '.dmg'
+    print(f'Making disk image containing {pkgname}...')
+    diskimagename = f'{os.path.splitext(pkgname)[0]}.dmg'
     diskimagepath = os.path.join(osutils.tmpdir(), diskimagename)
     cmd = ['/usr/bin/hdiutil', 'create', '-fs', 'HFS+',
            '-srcfolder', pkgpath, diskimagepath]
@@ -69,22 +69,19 @@ def make_dmg(pkgpath):
         output = proc.stdout.readline().decode('UTF-8')
         if not output and (proc.poll() != None):
             break
-        line = output.rstrip('\n')
-        if line:
+        if line := output.rstrip('\n'):
             print(line)
         sys.stdout.flush()
-    retcode = proc.poll()
-    if retcode:
+    if retcode := proc.poll():
         print('Disk image creation failed.', file=sys.stderr)
         return ''
-    print('Disk image created at: %s' % diskimagepath)
+    print(f'Disk image created at: {diskimagepath}')
     return diskimagepath
 
 
 def edit_pkginfo_in_editor(pkginfo):
     """Opens pkginfo list in the user's chosen editor."""
-    editor = pref('editor')
-    if editor:
+    if editor := pref('editor'):
         answer = get_input('Edit pkginfo before upload? [y/N]: ')
         if answer.lower().startswith('y'):
             filedesc, filepath = tempfile.mkstemp()
@@ -93,8 +90,7 @@ def edit_pkginfo_in_editor(pkginfo):
             try:
                 FoundationPlist.writePlist(pkginfo, filepath)
             except FoundationPlist.FoundationPlistException as err:
-                print(u'Could not save pkginfo to temp file: %s'
-                      % err, file=sys.stderr)
+                print(f'Could not save pkginfo to temp file: {err}', file=sys.stderr)
                 return pkginfo
 
             if editor.endswith('.app'):
@@ -104,8 +100,7 @@ def edit_pkginfo_in_editor(pkginfo):
             try:
                 dummy_returncode = subprocess.check_call(cmd)
             except (OSError, subprocess.CalledProcessError) as err:
-                print('Problem running editor %s: %s.' % (editor, err),
-                      file=sys.stderr)
+                print(f'Problem running editor {editor}: {err}.', file=sys.stderr)
                 os.remove(filepath)
                 return pkginfo
             else:
@@ -117,8 +112,7 @@ def edit_pkginfo_in_editor(pkginfo):
                 try:
                     edited_pkginfo = FoundationPlist.readPlist(filepath)
                 except FoundationPlist.FoundationPlistException as err:
-                    print(u'Problem reading edited pkginfo: %s' % err,
-                          file=sys.stderr)
+                    print(f'Problem reading edited pkginfo: {err}', file=sys.stderr)
                     os.remove(filepath)
                     return pkginfo
                 os.remove(filepath)
@@ -132,39 +126,34 @@ def prompt_for_subdirectory(repo, subdirectory):
         pkgsinfo_list = munkiimportlib.list_items_of_kind(repo, 'pkgsinfo')
     except munkirepo.RepoError as err:
         raise munkiimportlib.RepoCopyError(
-            u'Unable to get list of current pkgsinfo: %s' % err)
-    # filter the list of pkgsinfo to a list of subdirectories
-    subdir_set = set()
-    for item in pkgsinfo_list:
-        subdir_set.add(os.path.dirname(item))
+            f'Unable to get list of current pkgsinfo: {err}'
+        )
 
+    # filter the list of pkgsinfo to a list of subdirectories
+    subdir_set = {os.path.dirname(item) for item in pkgsinfo_list}
     while True:
-        newdir = get_input(
-            'Upload item to subdirectory path [%s]: ' % subdirectory)
-        if newdir:
-            destination_path = os.path.join('pkgsinfo', newdir)
-            if destination_path not in subdir_set:
-                answer = get_input('Path %s doesn\'t exist. Create it? [y/N] '
-                                   % destination_path)
-                if answer.lower().startswith('y'):
-                    break
-            else:
-                break
-        else:
+        newdir = get_input(f'Upload item to subdirectory path [{subdirectory}]: ')
+        if not newdir:
             return subdirectory
+        destination_path = os.path.join('pkgsinfo', newdir)
+        if destination_path in subdir_set:
+            break
+        answer = get_input('Path %s doesn\'t exist. Create it? [y/N] '
+                           % destination_path)
+        if answer.lower().startswith('y'):
+            break
     return newdir
 
 
 def make_catalogs(repo, options):
     """Rebuild our catalogs"""
     if not options.verbose:
-        print('Rebuilding catalogs at %s...' % options.repo_url)
+        print(f'Rebuilding catalogs at {options.repo_url}...')
         output_fn = None
     else:
         output_fn = print
 
-    errors = makecatalogslib.makecatalogs(repo, {}, output_fn=output_fn)
-    if errors:
+    if errors := makecatalogslib.makecatalogs(repo, {}, output_fn=output_fn):
         print('\nThe following issues occurred while building catalogs:\n')
         for error in errors:
             print(error)

@@ -49,8 +49,7 @@ def get_installer_item_names(repo, catalog_limit_list):
     try:
         catalogs_list = repo.itemlist('catalogs')
     except munkirepo.RepoError as err:
-        print((
-            u'Could not retrieve catalogs: %s' % err), file=sys.stderr)
+        print(f'Could not retrieve catalogs: {err}', file=sys.stderr)
         return []
     for catalog_name in catalogs_list:
         if catalog_name in catalog_limit_list:
@@ -58,9 +57,7 @@ def get_installer_item_names(repo, catalog_limit_list):
                 data = repo.get(os.path.join('catalogs', catalog_name))
                 catalog = readPlistFromString(data)
             except munkirepo.RepoError as err:
-                print((
-                    u'Could not retrieve catalog %s: %s'
-                    % (catalog_name, err)), file=sys.stderr)
+                print(f'Could not retrieve catalog {catalog_name}: {err}', file=sys.stderr)
             except (IOError, OSError, PlistReadError):
                 # skip items that aren't valid plists
                 # or that we can't read
@@ -69,8 +66,7 @@ def get_installer_item_names(repo, catalog_limit_list):
                 item_list.extend([item['name']
                                   for item in catalog
                                   if not item.get('update_for')])
-    item_list = list(set(item_list))
-    item_list.sort()
+    item_list = sorted(set(item_list))
     return item_list
 
 
@@ -79,8 +75,7 @@ def get_manifest_names(repo):
     try:
         manifest_names = repo.itemlist('manifests')
     except munkirepo.RepoError as err:
-        print((
-            u'Could not retrieve manifests: %s' % err), file=sys.stderr)
+        print(f'Could not retrieve manifests: {err}', file=sys.stderr)
         manifest_names = []
     manifest_names.sort()
     return manifest_names
@@ -91,8 +86,7 @@ def get_catalogs(repo):
     try:
         catalog_names = repo.itemlist('catalogs')
     except munkirepo.RepoError as err:
-        print((
-            u'Could not retrieve catalogs: %s' % err), file=sys.stderr)
+        print(f'Could not retrieve catalogs: {err}', file=sys.stderr)
         catalog_names = []
     catalog_names.sort()
     return catalog_names
@@ -110,30 +104,27 @@ def printplistitem(label, value, indent=0):
     """Prints a plist item in an 'attractive' way"""
     indentspace = '    '
     if value is None:
-        print(indentspace*indent, '%s: !NONE!' % label)
+        print(indentspace*indent, f'{label}: !NONE!')
     elif isinstance(value, list) or type(value).__name__ == 'NSCFArray':
         if label:
-            print(indentspace*indent, '%s:' % label)
+            print(indentspace*indent, f'{label}:')
         for item in value:
             printplistitem('', item, indent+1)
     elif isinstance(value, dict) or type(value).__name__ == 'NSCFDictionary':
         if label:
-            print(indentspace*indent, '%s:' % label)
-        keys = list(value.keys())
-        keys.sort()
+            print(indentspace*indent, f'{label}:')
+        keys = sorted(value.keys())
         for subkey in keys:
             printplistitem(subkey, value[subkey], indent+1)
+    elif label:
+        print(indentspace*indent, f'{label}: {value}')
     else:
-        if label:
-            print(indentspace*indent, '%s: %s' % (label, value))
-        else:
-            print(indentspace*indent, '%s' % value)
+        print(indentspace*indent, f'{value}')
 
 
 def printplist(plistdict):
     """Prints plist dictionary in a pretty(?) way"""
-    keys = list(plistdict.keys())
-    keys.sort()
+    keys = sorted(plistdict.keys())
     for key in keys:
         printplistitem(key, plistdict[key])
 
@@ -145,30 +136,26 @@ def get_manifest(repo, manifest_name):
         data = repo.get(manifest_ref)
         return readPlistFromString(data)
     except munkirepo.RepoError as err:
-        print(u'Could not retrieve manifest %s: %s'
-              % (manifest_name, err), file=sys.stderr)
+        print(f'Could not retrieve manifest {manifest_name}: {err}', file=sys.stderr)
         return None
     except (IOError, OSError, PlistReadError) as err:
-        print(u'Could not read manifest %s: %s' % (manifest_name, err),
-              file=sys.stderr)
+        print(f'Could not read manifest {manifest_name}: {err}', file=sys.stderr)
         return None
 
 
 def save_manifest(repo, manifest_dict, manifest_name, overwrite_existing=False):
     '''Saves a manifest to disk'''
     existing_manifest_names = get_manifest_names(repo)
-    if not overwrite_existing:
-        if manifest_name in existing_manifest_names:
-            print('%s already exists!' % manifest_name, file=sys.stderr)
-            return False
+    if not overwrite_existing and manifest_name in existing_manifest_names:
+        print(f'{manifest_name} already exists!', file=sys.stderr)
+        return False
     manifest_ref = os.path.join('manifests', manifest_name)
     try:
         data = writePlistToString(manifest_dict)
         repo.put(manifest_ref, data)
         return True
     except (IOError, OSError, PlistWriteError, munkirepo.RepoError) as err:
-        print(u'Saving %s failed: %s' % (manifest_name, err),
-              file=sys.stderr)
+        print(f'Saving {manifest_name} failed: {err}', file=sys.stderr)
         return False
 
 
@@ -180,19 +167,23 @@ def manifest_rename(repo, source_manifest_name, dest_manifest_name,
     source_manifest_ref = os.path.join('manifests', source_manifest_name)
     dest_manifest_ref = os.path.join('manifests', dest_manifest_name)
     existing_manifest_names = get_manifest_names(repo)
-    if not overwrite_existing:
-        if dest_manifest_name in existing_manifest_names:
-            print(u'%s already exists!' % dest_manifest_name, file=sys.stderr)
-            return False
+    if (
+        not overwrite_existing
+        and dest_manifest_name in existing_manifest_names
+    ):
+        print(f'{dest_manifest_name} already exists!', file=sys.stderr)
+        return False
     try:
         source_data = repo.get(source_manifest_ref)
         repo.put(dest_manifest_ref, source_data)
         repo.delete(source_manifest_ref)
         return True
     except munkirepo.RepoError as err:
-        print(u'Renaming %s to %s failed: %s'
-              % (source_manifest_name, dest_manifest_name, err),
-              file=sys.stderr)
+        print(
+            f'Renaming {source_manifest_name} to {dest_manifest_name} failed: {err}',
+            file=sys.stderr,
+        )
+
         return False
 
 
@@ -235,7 +226,7 @@ class MyOptionParser(optparse.OptionParser):
 
         """
         self.print_usage(sys.stderr)
-        raise MyOptParseError('option error: %s' % msg)
+        raise MyOptParseError(f'option error: {msg}')
 
     def exit(self, status=0, msg=None):
         if msg:
@@ -279,7 +270,7 @@ def list_catalogs(repo, args):
     try:
         _, arguments = parser.parse_args(args)
     except MyOptParseError as errmsg:
-        print(str(errmsg), file=sys.stderr)
+        print(errmsg, file=sys.stderr)
         return 22 # Invalid argument
     except MyOptParseExit:
         return 0
@@ -300,7 +291,7 @@ def list_catalog_items(repo, args):
     try:
         _, arguments = parser.parse_args(args)
     except MyOptParseError as errmsg:
-        print(str(errmsg), file=sys.stderr)
+        print(errmsg, file=sys.stderr)
         return 22 # Invalid argument
     except MyOptParseExit:
         return 0
@@ -311,7 +302,7 @@ def list_catalog_items(repo, args):
     available_catalogs = get_catalogs(repo)
     for catalog in arguments:
         if catalog not in available_catalogs:
-            print('%s: no such catalog!' % catalog, file=sys.stderr)
+            print(f'{catalog}: no such catalog!', file=sys.stderr)
             return 2 # No such file or directory
     for pkg in get_installer_item_names(repo, arguments):
         print(pkg)
@@ -327,7 +318,7 @@ def list_manifests(repo, args):
     try:
         _, arguments = parser.parse_args(args)
     except MyOptParseError as errmsg:
-        print(str(errmsg), file=sys.stderr)
+        print(errmsg, file=sys.stderr)
         return 22 # Invalid argument
     except MyOptParseExit:
         return 0
@@ -359,7 +350,7 @@ def find(repo, args):
     try:
         options, arguments = parser.parse_args(args)
     except MyOptParseError as errmsg:
-        print(str(errmsg), file=sys.stderr)
+        print(errmsg, file=sys.stderr)
         return 22 # Invalid argument
     except MyOptParseExit:
         return 0
@@ -380,8 +371,7 @@ def find(repo, args):
             data = repo.get(manifest_ref)
             manifest = readPlistFromString(data)
         except (IOError, OSError, PlistReadError, munkirepo.RepoError) as err:
-            print(u'Error reading %s: %s' % (manifest_ref, err),
-                  file=sys.stderr)
+            print(f'Error reading {manifest_ref}: {err}', file=sys.stderr)
             continue
         if keyname:
             if keyname in manifest:
@@ -390,12 +380,12 @@ def find(repo, args):
                     for item in value:
                         try:
                             if findtext.upper() in item.upper():
-                                print('%s: %s' % (name, item))
+                                print(f'{name}: {item}')
                                 count += 1
                         except AttributeError:
                             pass
                 elif findtext.upper() in value.upper():
-                    print('%s: %s' % (name, value))
+                    print(f'{name}: {value}')
                     count += 1
         else:
             for key in manifest.keys():
@@ -404,15 +394,15 @@ def find(repo, args):
                     for item in value:
                         try:
                             if findtext.upper() in item.upper():
-                                print('%s (%s): %s' % (name, key, item))
+                                print(f'{name} ({key}): {item}')
                                 count += 1
                         except AttributeError:
                             pass
                 elif findtext.upper() in value.upper():
-                    print('%s (%s): %s' % (name, key, value))
+                    print(f'{name} ({key}): {value}')
                     count += 1
 
-    print('%s matches found.' % count)
+    print(f'{count} matches found.')
     return 0
 
 
@@ -424,7 +414,7 @@ def display_manifest(repo, args):
     try:
         _, arguments = parser.parse_args(args)
     except MyOptParseError as errmsg:
-        print(str(errmsg), file=sys.stderr)
+        print(errmsg, file=sys.stderr)
         return 22 # Invalid argument
     except MyOptParseExit:
         return 0
@@ -433,8 +423,7 @@ def display_manifest(repo, args):
         parser.print_usage(sys.stderr)
         return 7 # Argument list too long
     manifestname = arguments[0]
-    manifest = get_manifest(repo, manifestname)
-    if manifest:
+    if manifest := get_manifest(repo, manifestname):
         printplist(manifest)
         return 0
     else:
@@ -463,7 +452,7 @@ def expand_included_manifests(repo, args):
     try:
         _, arguments = parser.parse_args(args)
     except MyOptParseError as errmsg:
-        print(str(errmsg), file=sys.stderr)
+        print(errmsg, file=sys.stderr)
         return 22 # Invalid argument
     except MyOptParseExit:
         return 0
@@ -487,7 +476,7 @@ def new_manifest(repo, args):
     try:
         _, arguments = parser.parse_args(args)
     except MyOptParseError as errmsg:
-        print(str(errmsg), file=sys.stderr)
+        print(errmsg, file=sys.stderr)
         return 22 # Invalid argument
     except MyOptParseExit:
         return 0
@@ -516,7 +505,7 @@ def copy_manifest(repo, args):
     try:
         _, arguments = parser.parse_args(args)
     except MyOptParseError as errmsg:
-        print(str(errmsg), file=sys.stderr)
+        print(errmsg, file=sys.stderr)
         return 22 # Invalid argument
     except MyOptParseExit:
         return 0
@@ -543,7 +532,7 @@ def rename_manifest(repo, args):
     try:
         _, arguments = parser.parse_args(args)
     except MyOptParseError as errmsg:
-        print(str(errmsg), file=sys.stderr)
+        print(errmsg, file=sys.stderr)
         return 22 # Invalid argument
     except MyOptParseExit:
         return 0
@@ -554,8 +543,7 @@ def rename_manifest(repo, args):
     source_manifest = arguments[0]
     dest_manifest = arguments[1]
     if manifest_rename(repo, source_manifest, dest_manifest):
-        print ('Renamed manifest %s to %s.'
-               % (source_manifest, dest_manifest))
+        print(f'Renamed manifest {source_manifest} to {dest_manifest}.')
         update_cached_manifest_list(repo)
         return 0
     else:
@@ -580,7 +568,7 @@ def add_pkg(repo, args):
     try:
         options, arguments = parser.parse_args(args)
     except MyOptParseError as errmsg:
-        print(str(errmsg), file=sys.stderr)
+        print(errmsg, file=sys.stderr)
         return 22 # Invalid argument
     except MyOptParseExit:
         return 0
@@ -602,9 +590,11 @@ def add_pkg(repo, args):
         return 2 # No such file or directory
     for section in get_manifest_pkg_sections():
         if pkgname in manifest.get(section, []):
-            print((
-                'Package %s is already in section %s of manifest %s.'
-                % (pkgname, section, options.manifest)), file=sys.stderr)
+            print(
+                f'Package {pkgname} is already in section {section} of manifest {options.manifest}.',
+                file=sys.stderr,
+            )
+
             return 1 # Operation not permitted
 
     manifest_catalogs = manifest.get('catalogs', [])
@@ -614,13 +604,15 @@ def add_pkg(repo, args):
             'WARNING: Package %s is not available in catalogs %s '
             'of manifest %s.'
             % (pkgname, manifest_catalogs, options.manifest)), file=sys.stderr)
-    if not options.section in manifest:
+    if options.section not in manifest:
         manifest[options.section] = [pkgname]
     else:
         manifest[options.section].append(pkgname)
     if save_manifest(repo, manifest, options.manifest, overwrite_existing=True):
-        print ('Added %s to section %s of manifest %s.'
-               % (pkgname, options.section, options.manifest))
+        print(
+            f'Added {pkgname} to section {options.section} of manifest {options.manifest}.'
+        )
+
         return 0
     else:
         return 1 # Operation not permitted
@@ -638,7 +630,7 @@ def move_install_to_uninstall(repo, args):
     try:
         options, arguments = parser.parse_args(args)
     except MyOptParseError as errmsg:
-        print(str(errmsg), file=sys.stderr)
+        print(errmsg, file=sys.stderr)
         return 22 # Invalid argument
     except MyOptParseExit:
         return 0
@@ -655,33 +647,39 @@ def move_install_to_uninstall(repo, args):
         return 7 # Argument list too long
     pkgname = arguments[0]
 
-    manifest = get_manifest(repo, options.manifest)
-    if not manifest:
+    if not (manifest := get_manifest(repo, options.manifest)):
         return 2 # No such file or directory
-    else:
-        if pkgname in manifest['managed_installs']:
-            manifest['managed_installs'].remove(pkgname)
-            print ('Removed %s from section %s of manifest %s'
-                   % (pkgname, 'managed_installs', options.manifest))
-        else:
-            print('WARNING: Package %s is not in section %s '
-                  'of manifest %s. No changes made.'
-                  % (pkgname, 'managed_installs', options.manifest),
-                  file=sys.stderr)
-            return 1 # Operation not permitted
-        if pkgname in manifest['managed_uninstalls']:
-            print ('%s is already in section managed_uninstalls of manifest %s.'
-                   % (pkgname, options.manifest))
-        else:
-            manifest['managed_uninstalls'].append(pkgname)
-            print ('Added %s to section managed_uninstalls of manifest %s.'
-                   % (pkgname, options.manifest))
+    if pkgname in manifest['managed_installs']:
+        manifest['managed_installs'].remove(pkgname)
+        print(
+            f'Removed {pkgname} from section managed_installs of manifest {options.manifest}'
+        )
 
-        if save_manifest(repo, manifest, options.manifest,
-                         overwrite_existing=True):
-            return 0
-        else:
-            return 1 # Operation not permitted
+    else:
+        print('WARNING: Package %s is not in section %s '
+              'of manifest %s. No changes made.'
+              % (pkgname, 'managed_installs', options.manifest),
+              file=sys.stderr)
+        return 1 # Operation not permitted
+    if pkgname in manifest['managed_uninstalls']:
+        print(
+            f'{pkgname} is already in section managed_uninstalls of manifest {options.manifest}.'
+        )
+
+    else:
+        manifest['managed_uninstalls'].append(pkgname)
+        print(
+            f'Added {pkgname} to section managed_uninstalls of manifest {options.manifest}.'
+        )
+
+
+    return (
+        0
+        if save_manifest(
+            repo, manifest, options.manifest, overwrite_existing=True
+        )
+        else 1
+    )
 
 
 def remove_pkg(repo, args):
@@ -702,7 +700,7 @@ def remove_pkg(repo, args):
     try:
         options, arguments = parser.parse_args(args)
     except MyOptParseError as errmsg:
-        print(str(errmsg), file=sys.stderr)
+        print(errmsg, file=sys.stderr)
         return 22 # Invalid argument
     except MyOptParseExit:
         return 0
@@ -722,20 +720,28 @@ def remove_pkg(repo, args):
     manifest = get_manifest(repo, options.manifest)
     if not manifest:
         return 2 # No such file or directory
-    if not options.section in manifest:
-        print('Section %s is not in manifest %s.'
-              % (options.section, options.manifest), file=sys.stderr)
+    if options.section not in manifest:
+        print(
+            f'Section {options.section} is not in manifest {options.manifest}.',
+            file=sys.stderr,
+        )
+
         return 1 # Operation not permitted
     if pkgname not in manifest[options.section]:
-        print('Package %s is not in section %s of manifest %s.'
-              % (pkgname, options.section, options.manifest), file=sys.stderr)
+        print(
+            f'Package {pkgname} is not in section {options.section} of manifest {options.manifest}.',
+            file=sys.stderr,
+        )
+
         return 1 # Operation not permitted
     else:
         manifest[options.section].remove(pkgname)
         if save_manifest(repo, manifest, options.manifest,
                          overwrite_existing=True):
-            print ('Removed %s from section %s of manifest %s.'
-                   % (pkgname, options.section, options.manifest))
+            print(
+                f'Removed {pkgname} from section {options.section} of manifest {options.manifest}.'
+            )
+
             return 0
         else:
             return 1 # Operation not permitted
@@ -752,7 +758,7 @@ def add_catalog(repo, args):
     try:
         options, arguments = parser.parse_args(args)
     except MyOptParseError as errmsg:
-        print(str(errmsg), file=sys.stderr)
+        print(errmsg, file=sys.stderr)
         return 22 # Invalid argument
     except MyOptParseExit:
         return 0
@@ -771,18 +777,20 @@ def add_catalog(repo, args):
 
     available_catalogs = get_catalogs(repo)
     if catalogname not in available_catalogs:
-        print('Unknown catalog name: %s.' % catalogname, file=sys.stderr)
+        print(f'Unknown catalog name: {catalogname}.', file=sys.stderr)
         return 2 # no such file or directory
 
     manifest = get_manifest(repo, options.manifest)
     if not manifest:
         return 2 # no such file or directory
-    if not 'catalogs' in manifest:
+    if 'catalogs' not in manifest:
         manifest['catalogs'] = []
     if catalogname in manifest['catalogs']:
-        print((
-            'Catalog %s is already in manifest %s.'
-            % (catalogname, options.manifest)), file=sys.stderr)
+        print(
+            f'Catalog {catalogname} is already in manifest {options.manifest}.',
+            file=sys.stderr,
+        )
+
         return 1 # Operation not permitted
     else:
         # put it at the front of the catalog list as that is usually
@@ -790,8 +798,7 @@ def add_catalog(repo, args):
         manifest['catalogs'].insert(0, catalogname)
         if save_manifest(repo, manifest, options.manifest,
                          overwrite_existing=True):
-            print ('Added %s to catalogs of manifest %s.'
-                   % (catalogname, options.manifest))
+            print(f'Added {catalogname} to catalogs of manifest {options.manifest}.')
             return 0
         else:
             return 1 # Operation not permitted
@@ -808,7 +815,7 @@ def remove_catalog(repo, args):
     try:
         options, arguments = parser.parse_args(args)
     except MyOptParseError as errmsg:
-        print(str(errmsg), file=sys.stderr)
+        print(errmsg, file=sys.stderr)
         return 22 # Invalid argument
     except MyOptParseExit:
         return 0
@@ -829,16 +836,17 @@ def remove_catalog(repo, args):
     if not manifest:
         return 2 # no such file or directory
     if catalogname not in manifest.get('catalogs', []):
-        print((
-            'Catalog %s is not in manifest %s.'
-            % (catalogname, options.manifest)), file=sys.stderr)
+        print(
+            f'Catalog {catalogname} is not in manifest {options.manifest}.',
+            file=sys.stderr,
+        )
+
         return 1 # Operation not permitted
     else:
         manifest['catalogs'].remove(catalogname)
         if save_manifest(repo, manifest, options.manifest,
                          overwrite_existing=True):
-            print ('Removed %s from catalogs of manifest %s.'
-                   % (catalogname, options.manifest))
+            print(f'Removed {catalogname} from catalogs of manifest {options.manifest}.')
             return 0
         else:
             return 1 # Operation not permitted
@@ -856,7 +864,7 @@ def add_included_manifest(repo, args):
     try:
         options, arguments = parser.parse_args(args)
     except MyOptParseError as errmsg:
-        print(str(errmsg), file=sys.stderr)
+        print(errmsg, file=sys.stderr)
         return 22 # Invalid argument
     except MyOptParseExit:
         return 0
@@ -875,8 +883,7 @@ def add_included_manifest(repo, args):
 
     available_manifests = get_manifest_names(repo)
     if manifest_to_include not in available_manifests:
-        print('Unknown manifest name: %s.' % manifest_to_include,
-              file=sys.stderr)
+        print(f'Unknown manifest name: {manifest_to_include}.', file=sys.stderr)
         return 2 # no such file or directory
     if manifest_to_include == options.manifest:
         print('Can\'t include %s in itself!.' % manifest_to_include,
@@ -886,18 +893,23 @@ def add_included_manifest(repo, args):
     manifest = get_manifest(repo, options.manifest)
     if not manifest:
         return 2 # no such file or directory
-    if not 'included_manifests' in manifest:
+    if 'included_manifests' not in manifest:
         manifest['included_manifests'] = []
     if manifest_to_include in manifest['included_manifests']:
-        print('Manifest %s is already included in manifest %s.'
-              % (manifest_to_include, options.manifest), file=sys.stderr)
+        print(
+            f'Manifest {manifest_to_include} is already included in manifest {options.manifest}.',
+            file=sys.stderr,
+        )
+
         return 1 # Operation not permitted
     else:
         manifest['included_manifests'].append(manifest_to_include)
         if save_manifest(repo, manifest, options.manifest,
                          overwrite_existing=True):
-            print ('Added %s to included_manifests of manifest %s.'
-                   % (manifest_to_include, options.manifest))
+            print(
+                f'Added {manifest_to_include} to included_manifests of manifest {options.manifest}.'
+            )
+
             return 0
         else:
             return 1 # Operation not permitted
@@ -915,7 +927,7 @@ def remove_included_manifest(repo, args):
     try:
         options, arguments = parser.parse_args(args)
     except MyOptParseError as errmsg:
-        print(str(errmsg), file=sys.stderr)
+        print(errmsg, file=sys.stderr)
         return 22 # Invalid argument
     except MyOptParseExit:
         return 0
@@ -936,15 +948,20 @@ def remove_included_manifest(repo, args):
     if not manifest:
         return 2 # no such file or directory
     if included_manifest not in manifest.get('included_manifests', []):
-        print('Manifest %s is not included in manifest %s.'
-              % (included_manifest, options.manifest), file=sys.stderr)
+        print(
+            f'Manifest {included_manifest} is not included in manifest {options.manifest}.',
+            file=sys.stderr,
+        )
+
         return 1 # Operation not permitted
     else:
         manifest['included_manifests'].remove(included_manifest)
         if save_manifest(repo, manifest, options.manifest,
                          overwrite_existing=True):
-            print('Removed %s from included_manifests of manifest %s.'
-                  % (included_manifest, options.manifest))
+            print(
+                f'Removed {included_manifest} from included_manifests of manifest {options.manifest}.'
+            )
+
             return 0
         else:
             return 1 # Operation not permitted
@@ -959,7 +976,7 @@ def refresh_cache(repo, args):
     try:
         _, arguments = parser.parse_args(args)
     except MyOptParseError as errmsg:
-        print(str(errmsg), file=sys.stderr)
+        print(errmsg, file=sys.stderr)
         return 22 # Invalid argument
     except MyOptParseExit:
         return 0
@@ -977,8 +994,7 @@ def refresh_cache(repo, args):
 def show_help():
     '''Prints available subcommands'''
     print("Available sub-commands:")
-    subcommands = list(CMD_ARG_DICT['cmds'].keys())
-    subcommands.sort()
+    subcommands = sorted(CMD_ARG_DICT['cmds'].keys())
     for item in subcommands:
         print('\t%s' % item)
     return 0
@@ -994,18 +1010,15 @@ def tab_completer(text, state):
         match_list = list(CMD_ARG_DICT.get('cmds', {}).keys())
     else:
         # we are matching args
-        cmd_line = readline.get_line_buffer()[0:readline.get_begidx()]
+        cmd_line = readline.get_line_buffer()[:readline.get_begidx()]
         cmd = shlex.split(cmd_line)[-1]
-        array_to_match = CMD_ARG_DICT.get('cmds', {}).get(cmd)
-        if array_to_match:
+        if array_to_match := CMD_ARG_DICT.get('cmds', {}).get(cmd):
+            match_list = CMD_ARG_DICT[array_to_match]
+        elif array_to_match := CMD_ARG_DICT.get('options', {}).get(cmd):
             match_list = CMD_ARG_DICT[array_to_match]
         else:
-            array_to_match = CMD_ARG_DICT.get('options', {}).get(cmd)
-            if array_to_match:
-                match_list = CMD_ARG_DICT[array_to_match]
-            else:
-                array_to_match = 'options'
-                match_list = list(CMD_ARG_DICT.get('options', {}).keys())
+            array_to_match = 'options'
+            match_list = list(CMD_ARG_DICT.get('options', {}).keys())
 
     matches = [item for item in match_list
                if item.upper().startswith(text.upper())]
@@ -1043,10 +1056,12 @@ def handle_subcommand(repo, args):
     if subcommand == 'exit':
         cleanup_and_exit(0)
 
-    if (subcommand not in ['version', 'configure', 'help']
-            and '-h' not in args and '--help' not in args):
-        if not repo:
-            repo = connect_to_repo()
+    if (
+        subcommand not in ['version', 'configure', 'help']
+        and '-h' not in args
+        and '--help' not in args
+    ) and not repo:
+        repo = connect_to_repo()
 
     try:
         # find function to call by looking in the global name table
@@ -1055,7 +1070,7 @@ def handle_subcommand(repo, args):
     except MyOptParseExit:
         return 0
     except (TypeError, KeyError):
-        print('Unknown subcommand: %s' % args[0], file=sys.stderr)
+        print(f'Unknown subcommand: {args[0]}', file=sys.stderr)
         show_help()
         return 2
     else:
@@ -1070,14 +1085,16 @@ def connect_to_repo():
     if not repo_url and repo_path:
         repo_url = path2url(repo_path)
     if not repo_url:
-        print((
-            u'No repo URL defined. Run %s --configure to define one.'
-            % os.path.basename(__file__)), file=sys.stderr)
+        print(
+            f'No repo URL defined. Run {os.path.basename(__file__)} --configure to define one.',
+            file=sys.stderr,
+        )
+
         exit(-1)
     try:
         repo = munkirepo.connect(repo_url, repo_plugin)
     except munkirepo.RepoError as err:
-        print(u'Repo error: %s' % err, file=sys.stderr)
+        print(f'Repo error: {err}', file=sys.stderr)
         exit(-1)
     return repo
 

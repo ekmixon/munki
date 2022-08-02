@@ -69,7 +69,7 @@ def getOsVersion(only_major_minor=True, as_tuple=False):
             os_version_tuple = (os_version_tuple[0],)
         else:
             # return something like (10,15)
-            os_version_tuple = os_version_tuple[0:2]
+            os_version_tuple = os_version_tuple[:2]
     if as_tuple:
         return tuple(map(int, os_version_tuple))
     # default
@@ -172,16 +172,18 @@ def pythonScriptRunning(scriptname):
             args = process.split()
             try:
                 # first look for Python processes
-                if (args[0].find('MacOS/Python') != -1 or
-                        args[0].find('python') != -1):
-                    # look for first argument being scriptname
-                    if args[1].find(scriptname) != -1:
-                        try:
-                            if int(pid) != int(mypid):
-                                return pid
-                        except ValueError:
-                            # pid must have some funky characters
-                            pass
+                if (
+                    (
+                        args[0].find('MacOS/Python') != -1
+                        or args[0].find('python') != -1
+                    )
+                ) and args[1].find(scriptname) != -1:
+                    try:
+                        if int(pid) != int(mypid):
+                            return pid
+                    except ValueError:
+                        # pid must have some funky characters
+                        pass
             except IndexError:
                 pass
     # if we get here we didn't find a Python script with scriptname
@@ -198,9 +200,7 @@ def osascript(osastring):
     (out, err) = proc.communicate()
     if proc.returncode != 0:
         print('Error: ', err.decode('UTF-8'), file=sys.stderr)
-    if out:
-        return out.decode('UTF-8').rstrip('\n')
-    return u''
+    return out.decode('UTF-8').rstrip('\n') if out else u''
 
 
 def bridgeos_update_staged():
@@ -216,7 +216,7 @@ def bridgeos_update_staged():
                             stderr=subprocess.PIPE)
     output = proc.communicate()[0].decode('UTF-8')
     if proc.returncode == 0:
-        munkilog.log("nvram output: %s" % output)
+        munkilog.log(f"nvram output: {output}")
         lines = output.splitlines()
         parts = lines[0].split()
         try:
@@ -225,13 +225,15 @@ def bridgeos_update_staged():
             seconds_ago = now - timestamp
             if seconds_ago < 60 * 60:
                 munkilog.log(
-                    "bridgeOS update staged %s seconds ago; shutdown required"
-                    % seconds_ago)
+                    f"bridgeOS update staged {seconds_ago} seconds ago; shutdown required"
+                )
+
                 return True
             #else
             munkilog.log(
-                "bridgeOS update %s seconds ago; too long ago to trust"
-                % seconds_ago)
+                f"bridgeOS update {seconds_ago} seconds ago; too long ago to trust"
+            )
+
             return False
         except (IndexError, ValueError):
             munkilog.log(

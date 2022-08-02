@@ -20,6 +20,7 @@ Created by Greg Neagle on 2016-12-14.
 
 Utilities that retrieve information from the current machine.
 """
+
 from __future__ import absolute_import, print_function
 
 # standard libs
@@ -60,16 +61,26 @@ except NameError:
     xrange = range # pylint: disable=redefined-builtin,invalid-name
 
 # Always ignore these directories when discovering applications.
-APP_DISCOVERY_EXCLUSION_DIRS = set([
-    'Volumes', 'tmp', '.vol', '.Trashes', '.MobileBackups', '.Spotlight-V100',
-    '.fseventsd', 'Network', 'net', 'home', 'cores', 'dev', 'private',
-    ])
+APP_DISCOVERY_EXCLUSION_DIRS = {
+    'Volumes',
+    'tmp',
+    '.vol',
+    '.Trashes',
+    '.MobileBackups',
+    '.Spotlight-V100',
+    '.fseventsd',
+    'Network',
+    'net',
+    'home',
+    'cores',
+    'dev',
+    'private',
+}
+
 
 
 class Error(Exception):
     """Class for domain specific exceptions."""
-
-
 class TimeoutError(Error):
     """Timeout limit exceeded since last I/O."""
 
@@ -116,7 +127,7 @@ class Popen(subprocess.Popen):
                 inactive = 0
                 char = fileobj.read(1)
                 output.append(char)  # keep newline
-                if char == '' or char == '\n':
+                if char in ['', '\n']:
                     break
 
         set_file_nonblock(fileobj, non_blocking=False)
@@ -180,15 +191,8 @@ class Popen(subprocess.Popen):
 
             returncode = self.poll()
 
-        if self.stdout is not None:
-            stdout_str = b''.join(stdout)
-        else:
-            stdout_str = None
-        if self.stderr is not None:
-            stderr_str = b''.join(stderr)
-        else:
-            stderr_str = None
-
+        stdout_str = b''.join(stdout) if self.stdout is not None else None
+        stderr_str = b''.join(stderr) if self.stderr is not None else None
         return (stdout_str, stderr_str)
 
 
@@ -204,7 +208,7 @@ def _asciiz_to_bytestr(a_bytestring):
     """
     i = a_bytestring.find(b'\0')
     if i > -1:
-        a_bytestring = a_bytestring[0:i]
+        a_bytestring = a_bytestring[:i]
     return a_bytestring
 
 
@@ -247,16 +251,8 @@ def get_filesystems():
     statfs_32_struct = b'=hh ll ll ll lQ lh hl 2l 15s 90s 90s x 16x'
     statfs_64_struct = b'=Ll QQ QQ Q ll l LLL 16s 1024s 1024s 32x'
     os_version = osutils.getOsVersion(as_tuple=True)
-    if os_version <= (10, 5):
-        mode = 32
-    else:
-        mode = 64
-
-    if mode == 64:
-        statfs_struct = statfs_64_struct
-    else:
-        statfs_struct = statfs_32_struct
-
+    mode = 32 if os_version <= (10, 5) else 64
+    statfs_struct = statfs_64_struct if mode == 64 else statfs_32_struct
     sizeof_statfs_struct = struct.calcsize(statfs_struct)
     bufsize = 30 * sizeof_statfs_struct  # only supports 30 mounted fs
     buf = ctypes.create_string_buffer(bufsize)
@@ -277,20 +273,20 @@ def get_filesystems():
     output = {}
     # struct_unpack returns lots of values, but we use only a few
     # pylint: disable=unused-variable
-    for i in xrange(0, no_of_structs):
-        if mode == 64:
-            (f_bsize, f_iosize, f_blocks, f_bfree, f_bavail, f_files,
-             f_ffree, f_fsid_0, f_fsid_1, f_owner, f_type, f_flags,
-             f_fssubtype,
-             f_fstypename, f_mntonname, f_mntfromname) = struct.unpack(
-                 statfs_struct, bytes(buf[ofs:ofs+sizeof_statfs_struct]))
-        elif mode == 32:
+    for _ in xrange(0, no_of_structs):
+        if mode == 32:
             (f_otype, f_oflags, f_bsize, f_iosize, f_blocks, f_bfree, f_bavail,
              f_files, f_ffree, f_fsid, f_owner, f_reserved1, f_type, f_flags,
              f_reserved2_0, f_reserved2_1, f_fstypename, f_mntonname,
              f_mntfromname) = struct.unpack(
                  statfs_struct, bytes(buf[ofs:ofs+sizeof_statfs_struct]))
 
+        elif mode == 64:
+            (f_bsize, f_iosize, f_blocks, f_bfree, f_bavail, f_files,
+             f_ffree, f_fsid_0, f_fsid_1, f_owner, f_type, f_flags,
+             f_fssubtype,
+             f_fstypename, f_mntonname, f_mntfromname) = struct.unpack(
+                 statfs_struct, bytes(buf[ofs:ofs+sizeof_statfs_struct]))
         try:
             stat_val = os.stat(_asciiz_to_bytestr(f_mntonname))
             output[stat_val.st_dev] = {
@@ -324,9 +320,11 @@ def is_excluded_filesystem(path, _retry=False):
         return None
 
     path_components = path.split('/')
-    if len(path_components) > 1:
-        if path_components[1] in APP_DISCOVERY_EXCLUSION_DIRS:
-            return True
+    if (
+        len(path_components) > 1
+        and path_components[1] in APP_DISCOVERY_EXCLUSION_DIRS
+    ):
+        return True
 
     if not FILESYSTEMS or _retry:
         FILESYSTEMS = get_filesystems()
@@ -341,12 +339,10 @@ def is_excluded_filesystem(path, _retry=False):
             # perhaps the stat() on the path caused autofs to mount
             # the required filesystem and now it will be available.
             # try one more time to look for it after flushing the cache.
-            display.display_debug1(
-                'Trying isExcludedFilesystem again for %s' % path)
+            display.display_debug1(f'Trying isExcludedFilesystem again for {path}')
             return is_excluded_filesystem(path, True)
         # _retry defined
-        display.display_debug1(
-            'Could not match path %s to a filesystem' % path)
+        display.display_debug1(f'Could not match path {path} to a filesystem')
         return None
 
     exc_flags = ('read-only' in FILESYSTEMS[stat_val.st_dev]['f_flags_set'] or
@@ -354,8 +350,7 @@ def is_excluded_filesystem(path, _retry=False):
     is_nfs = FILESYSTEMS[stat_val.st_dev]['f_fstypename'] == 'nfs'
 
     if is_nfs or exc_flags:
-        display.display_debug1(
-            'Excluding %s (flags %s, nfs %s)' % (path, exc_flags, is_nfs))
+        display.display_debug1(f'Excluding {path} (flags {exc_flags}, nfs {is_nfs})')
 
     return is_nfs or exc_flags
 
@@ -470,9 +465,7 @@ def sp_application_data():
     try:
         plist = FoundationPlist.readPlistFromString(output)
         # system_profiler xml is an array
-        application_data = {}
-        for item in plist[0]['_items']:
-            application_data[item.get('path')] = item
+        application_data = {item.get('path'): item for item in plist[0]['_items']}
     except BaseException:
         application_data = {}
     return application_data
@@ -488,8 +481,7 @@ def app_data():
     applist = set(launchservices_installed_apps())
     applist.update(spotlight_installed_apps())
     for pathname in applist:
-        iteminfo = {}
-        iteminfo['name'] = os.path.splitext(os.path.basename(pathname))[0]
+        iteminfo = {'name': os.path.splitext(os.path.basename(pathname))[0]}
         iteminfo['path'] = pathname
         plistpath = os.path.join(pathname, 'Contents', 'Info.plist')
         if os.path.exists(plistpath):
@@ -545,7 +537,7 @@ def get_version():
             except KeyError:
                 pass
     if build:
-        vers = vers + "." + build
+        vers = f"{vers}.{build}"
     return vers
 
 
@@ -561,8 +553,7 @@ def get_sp_data(data_type):
         # system_profiler xml is an array
         sp_dict = plist[0]
         items = sp_dict['_items']
-        sp_items_dict = items[0]
-        return sp_items_dict
+        return items[0]
     except BaseException:
         return {}
 
@@ -627,11 +618,9 @@ def get_serial_number():
     platformExpert = IOServiceGetMatchingService(
         kIOMasterPortDefault, IOServiceMatching(b"IOPlatformExpertDevice")
     )
-    serial = IORegistryEntryCreateCFProperty(
+    return IORegistryEntryCreateCFProperty(
         platformExpert, kIOPlatformSerialNumberKey, kCFAllocatorDefault, 0
     )
-
-    return serial
 
 
 def hardware_model():
@@ -698,8 +687,7 @@ def getMachineFacts():
     """Gets some facts about this machine we use to determine if a given
     installer is applicable to this OS or hardware"""
     # pylint: disable=C0103
-    machine = dict()
-    machine['hostname'] = unicode_or_str(os.uname()[1])
+    machine = {'hostname': unicode_or_str(os.uname()[1])}
     arch = os.uname()[4]
     if arch == 'x86_64':
         # we might be natively Intel64, or running under Rosetta.
@@ -768,9 +756,6 @@ def get_conditions():
                 pass  # script is not required, so pass
             except utils.RunExternalScriptError as err:
                 print(unicode_or_str(err), file=sys.stderr)
-    else:
-        # /usr/local/munki/conditions does not exist
-        pass
     if (os.path.exists(conditionalitemspath) and
             valid_plist(conditionalitemspath)):
         # import conditions into conditions dict
@@ -790,8 +775,7 @@ def saveappdata():
     munkilog.log('Saving application inventory...')
     app_inventory = []
     for item in app_data():
-        inventory_item = {}
-        inventory_item['CFBundleName'] = item.get('name')
+        inventory_item = {'CFBundleName': item.get('name')}
         inventory_item['bundleid'] = item.get('bundleid')
         inventory_item['version'] = item.get('version')
         inventory_item['path'] = item.get('path', '')
@@ -805,8 +789,7 @@ def saveappdata():
             os.path.join(
                 prefs.pref('ManagedInstallDir'), 'ApplicationInventory.plist'))
     except FoundationPlist.NSPropertyListSerializationException as err:
-        display.display_warning(
-            'Unable to save inventory report: %s' % err)
+        display.display_warning(f'Unable to save inventory report: {err}')
 
 
 # conditional/predicate info functions
@@ -854,7 +837,7 @@ def predicate_info_object():
     '''Returns our info object used for predicate comparisons'''
     info_object = {}
     machine = getMachineFacts()
-    info_object.update(machine)
+    info_object |= machine
     info_object.update(get_conditions())
     # use our start time for "current" date (if we have it)
     # and add the timezone offset to it so we can compare
@@ -864,7 +847,7 @@ def predicate_info_object():
             reports.report.get('StartTime', reports.format_time())))
     # split os version into components for easier predicate comparison
     os_vers = machine['os_vers']
-    os_vers = os_vers + '.0.0'
+    os_vers = f'{os_vers}.0.0'
     info_object['os_vers_major'] = int(os_vers.split('.')[0])
     info_object['os_vers_minor'] = int(os_vers.split('.')[1])
     info_object['os_vers_patch'] = int(os_vers.split('.')[2])
